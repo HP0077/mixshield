@@ -15,7 +15,7 @@ from agentdojo.benchmark import benchmark_suite_without_injections
 from agentdojo.logging import OutputLogger
 from agentdojo.task_suite.load_suites import get_suite
 
-from bench.adapters import MODELS, make_pipeline
+from bench.adapters import AGENTS, MODELS, make_pipeline
 from bench.budget import Budget, BudgetExceeded
 from bench.goals import FIXED_USER_TASK, GOALS
 from bench.lean import VERSION, run_pair
@@ -38,14 +38,15 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", choices=list(MODELS), required=True)
     parser.add_argument("--out", required=True)
+    parser.add_argument("--agent", choices=list(AGENTS), default="default")
     parser.add_argument("--max-usd", type=float, required=True)
     args = parser.parse_args()
 
     model_id = MODELS[args.model]["model_id"]
-    pipeline = make_pipeline(args.model)
+    pipeline = make_pipeline(args.model, agent=args.agent)
     llm = next(e for e in pipeline.elements if hasattr(e, "calls"))
     llm.budget = Budget(args.max_usd)
-    logdir = Path("results/raw_logs") / f"e0_baseline_{args.model}"
+    logdir = Path("results/raw_logs") / (f"e0_baseline_{args.model}" + ("" if args.agent == "default" else f"_{args.agent}"))
     folder = logdir / model_id.replace("/", "_")
 
     with open(args.out, "w", newline="", encoding="utf-8") as f:

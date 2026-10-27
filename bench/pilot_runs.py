@@ -11,7 +11,7 @@ from pathlib import Path
 
 from agentdojo.task_suite.load_suites import get_suite
 
-from bench.adapters import MODELS, make_pipeline
+from bench.adapters import AGENTS, MODELS, make_pipeline
 from bench.budget import Budget, BudgetExceeded
 from bench.goals import FIXED_USER_TASK, GOALS
 from bench.lean import VERSION, TextAttack, run_pair
@@ -26,10 +26,11 @@ def main() -> None:
     parser.add_argument("--out", required=True)
     parser.add_argument("--max-usd", type=float, required=True)
     parser.add_argument("--model", choices=list(MODELS), default="muse-spark-open")
+    parser.add_argument("--agent", choices=list(AGENTS), default="default")
     parser.add_argument("--skip-goals", type=int, nargs="*", default=[])
     args = parser.parse_args()
 
-    pipeline = make_pipeline(args.model)
+    pipeline = make_pipeline(args.model, agent=args.agent)
     llm = next(e for e in pipeline.elements if hasattr(e, "calls"))
     llm.budget = Budget(args.max_usd)
     logdir = Path("results/raw_logs") / args.name
