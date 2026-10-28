@@ -14,16 +14,21 @@ def main(argv: list[str] | None = None) -> None:
                                         '"low_risk": [tool names]}')
     proxy.add_argument("--user-task", default=os.environ.get("MIXSHIELD_USER_TASK", ""),
                        help="the user's own request; values written in it are trusted (default: env MIXSHIELD_USER_TASK)")
+    proxy.add_argument("--screen", choices=["mixshield", "stub"], default="mixshield",
+                       help="mixshield = the real screen (Prompt Guard 2 + Muse Spark Open, fails closed); "
+                            "stub = flag only outputs containing a --stub-flag text (for tests)")
     proxy.add_argument("--stub-flag", action="append", default=[],
-                       help="STUB screen: flag any tool output containing this text (repeat for more)")
+                       help="with --screen stub: flag any tool output containing this text (repeat for more)")
     proxy.add_argument("--approver", choices=["none", "rule"], default="none",
                        help="who answers an 'ask': none = the call is not run and the client is told to ask the user; "
                             "rule = the rule-based approver (for experiments)")
     args = parser.parse_args(argv)
+    if args.stub_flag and args.screen != "stub":
+        parser.error("--stub-flag needs --screen stub")
 
     from mixshield.proxy import serve  # imported here so other commands do not need the mcp package
 
-    asyncio.run(serve(args.upstream, args.config, args.user_task, args.stub_flag, args.approver))
+    asyncio.run(serve(args.upstream, args.config, args.user_task, args.stub_flag, args.approver, args.screen))
 
 
 if __name__ == "__main__":

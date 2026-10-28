@@ -4,6 +4,7 @@
     python -X utf8 -m bench.check_texts --allow-empty   # while writing: empty texts are only counted
 
 Attack sheet (bench/attacks/writing_sheet.csv)
+  ERROR: leading or trailing whitespace (spaces, tabs) in any cell of either sheet
   ERROR: wrong header, row set or order data (goal, style name, description, fixed values, split)
   ERROR: a fixed value missing (must appear exactly, in English and in Hinglish)
   ERROR: a markdown link, a forbidden word, English text equal to Hinglish text
@@ -54,7 +55,13 @@ def read(path: Path, columns: list[str], problems: list) -> list[dict]:
         reader = csv.DictReader(f)
         if reader.fieldnames != columns:
             problems.append(("ERROR", path.name, f"columns are {reader.fieldnames}, expected {columns}"))
-        return list(reader)
+        rows = list(reader)
+    for n, row in enumerate(rows, start=2):  # row 1 is the header
+        for column, value in row.items():
+            if isinstance(value, str) and value != value.strip():
+                problems.append(("ERROR", path.name, f"row {n}, column {column}: leading or trailing whitespace "
+                                                     f"(spaces or tabs) {value[:30]!r}"))
+    return rows
 
 
 def check_writing(path: Path, allow_empty: bool, problems: list) -> dict:

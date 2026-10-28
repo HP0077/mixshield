@@ -31,8 +31,10 @@ FAIL CLOSED. Every tool is classified when the tool list is read, and the result
 Name rules are a heuristic: a tool called "get_..." that has side effects would be treated as low-risk. Read the
 startup log, and put such a tool in "policy".
 
-The screen is a STUB for now (StubScreen: flags a text that contains one of the --stub-flag strings). It is not a
-detector. The real screen replaces it through the same hook: screen(text) -> ScreenVerdict.
+The screen is mixshield/screen.py (Screen: Prompt Guard 2 + the Muse Spark Open classifier; it fails closed, so an
+output it cannot check counts as flagged). For tests, `--screen stub` uses StubScreen instead: it flags a text that
+contains one of the --stub-flag strings. The stub is not a detector. Both use the same hook: screen(text) -> verdict
+with .flagged and .reason.
 
 "ask": without an approver the call is not run and the client gets a message to show the user. With an approver
 (mixshield/approval.py: --approver rule, or a human prompt in the demo) the approver gets an ApprovalRequest and
@@ -40,14 +42,14 @@ True runs the call; False returns "declined". A "block" is never offered to the 
 The proxy never prints to stdout (it is the MCP channel); logs go to stderr.
 """
 
+import asyncio
 import json
 import os
-import re
 import shlex
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Iterable
+from typing import Awaitable, Callable, Iterable
 
 import mcp.types as types
 from mcp.client.session import ClientSession
@@ -56,31 +58,11 @@ from mcp.server.lowlevel import Server
 from mcp.server.stdio import stdio_server
 
 from mixshield.approval import ApprovalRequest, FlaggedText, RuleApprover
-from mixshield.gate import DESTINATION, TEXT, VALUE, Decision, Gate, Policy
+from mixshield.gate import DESTINATION, TEXT, VALUE, Gate, Policy
+from mixshield.screen import Screen, ScreenVerdict
+from mixshield.tool_rules import ToolClass, classify_tools, policy_of  # noqa: F401 (policy_of: used by tests)
 
 KINDS = {DESTINATION, VALUE, TEXT}
-
-# A tool is high-risk if its name has one of these words ...
-HIGH_RISK_NAME_RE = re.compile(
-    r"send|transfer|pay|schedule|delete|remove|share|post|invite|update|create|cancel|reschedule|add_|publish|"
-    r"reserve|book|set_|change|move|write|submit|execute|run_|grant|revoke|approve", re.IGNORECASE)
-# ... and low-risk only if it starts with a read-only verb (and has no high-risk word).
-LOW_RISK_NAME_RE = re.compile(
-    r"^(?:get|list|read|search|find|fetch|view|show|describe|count|check|lookup|query)(?:[_A-Z0-9]|$)")
-# Argument names: what an argument is, by name.
-DESTINATION_ARG_RE = re.compile(
-    r"recipient|^to$|_to$|email|iban|address|url|channel|user|participant|^cc$|^bcc$|account|target|destination",
-    re.IGNORECASE)
-TEXT_ARG_RE = re.compile(r"body|subject|content|message|text|title|description|note|reference|memo|comment",
-                         re.IGNORECASE)
-VALUE_ARG_RE = re.compile(r"password|passwd|secret", re.IGNORECASE)
-SAFE_TYPES = {"integer", "number", "boolean", "null"}  # arguments of only these types are never checked
-
-
-@dataclass(frozen=True)
-class ScreenVerdict:
-    flagged: bool
-    reason: str = ""
 
 
 class StubScreen:
@@ -93,15 +75,8 @@ class StubScreen:
         lowered = text.lower()
         for needle in self.needles:
             if needle in lowered:
-                return ScreenVerdict(True, f"stub screen: the text contains {needle!r}")
+                return ScreenVerdict(True, reason=f"stub screen: the text contains {needle!r}")
         return ScreenVerdict(False)
-
-
-@dataclass(frozen=True)
-class ToolClass:
-    risk: str  # "high" or "low"
-    why: str
-    checked: dict[str, str]  # argument -> kind (high-risk tools only)
 
 
 @dataclass(frozen=True)
@@ -109,63 +84,6 @@ class Config:
     policy: Policy
     trusted: list[str]
     low_risk: list[str]
-
-
-def _types(schema: dict) -> set[str]:
-    found: set[str] = set()
-    declared = schema.get("type")
-    found.update([declared] if isinstance(declared, str) else declared or [])
-    for key in ("anyOf", "oneOf", "allOf"):
-        for sub in schema.get(key, []):
-            found |= _types(sub)
-    items = schema.get("items")
-    if isinstance(items, dict):
-        found |= {f"[{t}]" for t in _types(items)}
-    return found
-
-
-def _arg_kind(name: str, schema: dict, by_name_only: bool) -> str | None:
-    """Kind of one argument, or None if it is not checked. Fail-closed mode checks every non-numeric argument."""
-    if VALUE_ARG_RE.search(name):
-        return VALUE
-    if DESTINATION_ARG_RE.search(name):
-        return DESTINATION
-    if TEXT_ARG_RE.search(name):
-        return TEXT
-    if by_name_only:
-        return None
-    types_ = _types(schema)
-    if types_ and types_ <= SAFE_TYPES:
-        return None
-    return DESTINATION if types_ & {"string", "[string]"} else TEXT  # no clear type: scan it as text
-
-
-def classify_tools(tools: Iterable[types.Tool], overrides: Policy | None = None,
-                   low_risk: Iterable[str] = ()) -> dict[str, ToolClass]:
-    overrides, low_risk = overrides or {}, set(low_risk)
-    classes = {}
-    for tool in tools:
-        properties = (tool.inputSchema or {}).get("properties", {})
-        if tool.name in low_risk:
-            classes[tool.name] = ToolClass("low", "config low_risk list", {})
-        elif tool.name in overrides:
-            classes[tool.name] = ToolClass("high", "config policy", dict(overrides[tool.name]))
-        elif LOW_RISK_NAME_RE.search(tool.name) and not HIGH_RISK_NAME_RE.search(tool.name):
-            classes[tool.name] = ToolClass("low", "read-only name", {})
-        else:
-            named = HIGH_RISK_NAME_RE.search(tool.name) is not None
-            checked = {a: k for a, s in properties.items() if (k := _arg_kind(a, s, by_name_only=named))}
-            why = "high-risk name"
-            if not named or not checked:
-                checked = {a: k for a, s in properties.items() if (k := _arg_kind(a, s, by_name_only=False))}
-                why = ("unclassified: treated as high-risk" if not named
-                       else "high-risk name, no argument recognised: all arguments checked")
-            classes[tool.name] = ToolClass("high", why, checked)
-    return classes
-
-
-def policy_of(classes: dict[str, ToolClass]) -> Policy:
-    return {name: dict(c.checked) for name, c in classes.items() if c.risk == "high"}
 
 
 def describe_classes(classes: dict[str, ToolClass]) -> list[str]:
@@ -216,7 +134,7 @@ class Proxy:
         self.trusted = list(trusted)
         self.overrides = policy or {}
         self.low_risk = list(low_risk)
-        self.screen = screen or StubScreen()
+        self.screen = screen or Screen()
         self.user_task = user_task
         self.approver = approver
         self.annotate = annotate
@@ -262,13 +180,13 @@ class Proxy:
                 approved = await approved
             if approved:
                 self._log(name, "allow", f"approved ({decision.reason})")
-                return self._screen_result(name, await self.upstream.call_tool(name, args))
+                return await self._screen_result(name, await self.upstream.call_tool(name, args))
             self._log(name, "declined", decision.reason)
             return text_result(f"The user declined the call to {name}. It was NOT run. {decision.reason}. "
                                f"Do not retry it.")
         self._log(name, decision.action, decision.reason)
         if decision.action == "allow":
-            return self._screen_result(name, await self.upstream.call_tool(name, args))
+            return await self._screen_result(name, await self.upstream.call_tool(name, args))
         if decision.action == "block":
             return text_result(
                 f"MixShield BLOCKED the call to {name}. It was NOT run. {decision.reason}. "
@@ -277,11 +195,12 @@ class Proxy:
             f"MixShield needs the user's confirmation before calling {name}. It was NOT run. {decision.reason}. "
             f"Show the user this call ({json.dumps(args, ensure_ascii=False)}) and ask whether to go ahead.")
 
-    def _screen_result(self, name: str, result: types.CallToolResult) -> types.CallToolResult:
+    async def _screen_result(self, name: str, result: types.CallToolResult) -> types.CallToolResult:
         reasons = []
         for block in result.content:
             if isinstance(block, types.TextContent):
-                verdict = self.screen(block.text)
+                # In a thread: the real screen calls a model and an API, and the event loop must keep serving MCP.
+                verdict = await asyncio.to_thread(self.screen, block.text)
                 if verdict.flagged:
                     self.flagged.append(FlaggedText(block.text, verdict.reason))
                     reasons.append(verdict.reason)
@@ -303,7 +222,8 @@ class Proxy:
 
 
 async def serve(upstream_command: str, config: str | Path | None = None, user_task: str = "",
-                stub_flags: Iterable[str] = (), approver: str = "none") -> None:
+                stub_flags: Iterable[str] = (), approver: str = "none", screen: str = "mixshield") -> None:
+    """screen: "mixshield" (the real screen) or "stub" (StubScreen with stub_flags, for tests)."""
     settings = load_config(config)
     command = split_command(upstream_command)
     params = StdioServerParameters(command=command[0], args=command[1:])
@@ -311,7 +231,7 @@ async def serve(upstream_command: str, config: str | Path | None = None, user_ta
         async with ClientSession(read, write) as session:
             info = await session.initialize()
             proxy = Proxy(session, trusted=settings.trusted, policy=settings.policy, low_risk=settings.low_risk,
-                          screen=StubScreen(stub_flags), user_task=user_task,
+                          screen=StubScreen(stub_flags) if screen == "stub" else Screen(), user_task=user_task,
                           approver=RuleApprover() if approver == "rule" else None)
             await proxy.list_tools()  # classifies the tools and logs them before the first call can arrive
             server = Server(f"mixshield-proxy({info.serverInfo.name})")

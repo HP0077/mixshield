@@ -140,7 +140,7 @@ def test_rule_approver_wired_into_the_proxy():
 
 def test_policy_is_inferred_and_nothing_runs_before_it_exists():
     upstream = FakeUpstream(TOOLS)
-    proxy = Proxy(upstream, trusted=[IBAN_OK], user_task="")
+    proxy = Proxy(upstream, trusted=[IBAN_OK], user_task="", screen=StubScreen())
     result = run(proxy.call_tool("transfer_money", {"iban": IBAN_NEW, "amount": 1}))  # no list_tools before
     assert result.isError and upstream.calls == []
 
@@ -194,7 +194,7 @@ def test_config_low_risk_overrides_and_config_policy_wins_over_names():
 def test_unknown_tool_name_wire_funds_is_checked_by_the_proxy():
     wire = tool("wire_funds", {"account": STR, "amount": {"type": "number"}})
     upstream = FakeUpstream([wire])
-    proxy = Proxy(upstream, trusted=["ACME-001"], user_task="Wire 50 to ACME-001")
+    proxy = Proxy(upstream, trusted=["ACME-001"], user_task="Wire 50 to ACME-001", screen=StubScreen())
     assert run(proxy.call_tool("wire_funds", {"account": "ACME-001", "amount": 50})).isError is False
     ask = run(proxy.call_tool("wire_funds", {"account": "EVIL-999", "amount": 50}))
     assert ask.isError and "confirmation" in text_of(ask)
@@ -203,7 +203,7 @@ def test_unknown_tool_name_wire_funds_is_checked_by_the_proxy():
 
 def test_totally_unknown_tool_name_is_checked_by_the_proxy():
     upstream = FakeUpstream([tool("frobnicate", {"widget": STR})])
-    proxy = Proxy(upstream, trusted=["w-1"])
+    proxy = Proxy(upstream, trusted=["w-1"], screen=StubScreen())
     assert run(proxy.call_tool("frobnicate", {"widget": "w-1"})).isError is False
     assert run(proxy.call_tool("frobnicate", {"widget": "w-2"})).isError is True
     assert [c[1]["widget"] for c in upstream.calls] == ["w-1"]
@@ -211,20 +211,21 @@ def test_totally_unknown_tool_name_is_checked_by_the_proxy():
 
 def test_explicit_low_risk_list_turns_the_check_off():
     upstream = FakeUpstream([tool("wire_funds", {"account": STR})])
-    proxy = Proxy(upstream, low_risk=["wire_funds"])
+    proxy = Proxy(upstream, low_risk=["wire_funds"], screen=StubScreen())
     assert not run(proxy.call_tool("wire_funds", {"account": "EVIL-999"})).isError
 
 
 def test_call_to_a_tool_that_is_not_listed_is_refused():
     upstream = FakeUpstream(TOOLS)
-    proxy = Proxy(upstream)
+    proxy = Proxy(upstream, screen=StubScreen())
     result = run(proxy.call_tool("secret_tool", {"x": "y"}))
     assert result.isError and "not a tool of the upstream server" in text_of(result)
     assert upstream.calls == []
 
 
 def test_startup_log_lists_high_and_low_risk_tools(capsys):
-    proxy = Proxy(FakeUpstream(TOOLS + [tool("wire_funds", {"account": STR, "amount": {"type": "number"}})]))
+    proxy = Proxy(FakeUpstream(TOOLS + [tool("wire_funds", {"account": STR, "amount": {"type": "number"}})]),
+                  screen=StubScreen())
     run(proxy.list_tools())
     err = capsys.readouterr().err
     assert "high-risk tools" in err and "low-risk tools" in err
@@ -257,7 +258,7 @@ def test_demo_server_through_the_real_proxy(tmp_path):
         command=sys.executable, cwd=str(REPO),
         args=["-X", "utf8", "-m", "mixshield.cli", "proxy", "--upstream", upstream,
               "--config", "demo/policy.json", "--user-task", "Pay invoice INV-101",
-              "--stub-flag", "bank account badal gaya"])
+              "--screen", "stub", "--stub-flag", "bank account badal gaya"])
 
     async def scenario(errlog):
         async with stdio_client(params, errlog=errlog) as (read, write):
@@ -296,7 +297,8 @@ def test_unknown_tool_through_the_real_proxy():
     params = StdioServerParameters(
         command=sys.executable, cwd=str(REPO),
         args=["-X", "utf8", "-m", "mixshield.cli", "proxy", "--upstream",
-              f'"{sys.executable}" -X utf8 tests/fake_wire_server.py', "--user-task", "Wire 5 to ACME-001"])
+              f'"{sys.executable}" -X utf8 tests/fake_wire_server.py', "--user-task", "Wire 5 to ACME-001",
+              "--screen", "stub"])
 
     async def scenario():
         async with stdio_client(params) as (read, write):
@@ -317,7 +319,7 @@ def test_rule_approver_through_the_real_proxy():
         command=sys.executable, cwd=str(REPO),
         args=["-X", "utf8", "-m", "mixshield.cli", "proxy", "--upstream",
               f'"{sys.executable}" -X utf8 tests/fake_wire_server.py', "--user-task", "Wire 5 to Bob",
-              "--approver", "rule"])
+              "--approver", "rule", "--screen", "stub"])
 
     async def scenario():
         async with stdio_client(params) as (read, write):

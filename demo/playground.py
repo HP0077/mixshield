@@ -6,15 +6,12 @@ Keys come from environment variables only: MODEL_API_KEY / BASETEN_API_KEY (see 
 """
 
 import json
-import os
 from pathlib import Path
 
 import gradio as gr
-import openai
 
-from bench.adapters import MODELS
-from bench.e2_detect import SCREEN_PROMPT, THRESHOLD, parse_screen
 from mixshield.gate import Gate
+from mixshield.screen import Screen
 
 POLICY_FILE = Path(__file__).parent / "policy.json"
 CONFIG = json.loads(POLICY_FILE.read_text(encoding="utf-8"))
@@ -31,39 +28,26 @@ NORMAL_HINGLISH = ("Namaste Emma, Friday ko 11 baje meeting rakhte hain. Project
 
 DEFAULT_TASK = "Pay invoice INV-102"
 
-_prompt_guard = None
+SCREEN = Screen()  # the same screen the proxy uses (normalise, Prompt Guard 2, Muse Spark Open; fails closed)
 
 
-def prompt_guard_result(text: str) -> tuple[str, str]:
-    """Return (score text, verdict text). Loads the model on first use."""
-    global _prompt_guard
-    try:
-        if _prompt_guard is None:
-            from bench.guards import PromptGuard2
-            _prompt_guard = PromptGuard2()
-        score = _prompt_guard.score(text)
-    except Exception as e:  # missing HF access, no torch, etc.
-        return "-", f"Not available: {type(e).__name__}"
-    return f"{score:.3f}", "FLAGGED" if score >= THRESHOLD else "not flagged"
+def score_text(score: float | None) -> str:
+    return "-" if score is None else f"{score:.3f}"
 
 
-def screen_result(text: str) -> tuple[str, str, str, bool]:
-    """Return (score text, verdict text, reason, flagged)."""
-    cfg = MODELS["muse-spark-open"]
-    key = os.environ.get(cfg["key_env"])
-    if not key:
-        return "-", f"Not available: {cfg['key_env']} is not set", "", False
-    try:
-        client = openai.OpenAI(api_key=key, base_url=cfg["base_url"])
-        response = client.chat.completions.create(
-            model=cfg["model_id"], temperature=0, max_tokens=4000,
-            messages=[{"role": "system", "content": SCREEN_PROMPT},
-                      {"role": "user", "content": f"<text>\n{text}\n</text>"}])
-        score, reason, _ = parse_screen(response.choices[0].message.content or "")
-    except (openai.OpenAIError, ValueError, KeyError, json.JSONDecodeError) as e:
-        return "-", f"Not available: {type(e).__name__}", "", False
-    flagged = score >= THRESHOLD
-    return f"{score:.3f}", "FLAGGED" if flagged else "not flagged", reason, flagged
+def screen_result(text: str):
+    """Run the real screen once. Return (Prompt Guard 2 score, its verdict, screen score, screen verdict, reason,
+    flagged). If a detector was unavailable the screen fails closed: the text counts as flagged."""
+    verdict = SCREEN(text)
+    pg = verdict.prompt_guard_score
+    pg_verdict = "Not available" if pg is None else ("FLAGGED" if pg >= SCREEN.pg_threshold else "not flagged")
+    ms = verdict.classifier_score
+    if verdict.reason.startswith("screen unavailable"):
+        ms_verdict = "FLAGGED (screen unavailable, fails closed)"
+    else:
+        ms_verdict = "FLAGGED" if verdict.flagged else "not flagged"
+    return (score_text(pg), pg_verdict, score_text(ms), ms_verdict,
+            f"[{verdict.language}] {verdict.reason}", verdict.flagged)
 
 
 def gate_result(iban: str, amount: float | None, reference: str, user_task: str, text: str, flagged: bool) -> str:
@@ -76,8 +60,7 @@ def gate_result(iban: str, amount: float | None, reference: str, user_task: str,
 def analyse(text, iban, amount, reference, user_task):
     if not text or not text.strip():
         return "-", "", "-", "", "", "Paste a message first.", False
-    pg_score, pg_verdict = prompt_guard_result(text)
-    ms_score, ms_verdict, ms_reason, flagged = screen_result(text)
+    pg_score, pg_verdict, ms_score, ms_verdict, ms_reason, flagged = screen_result(text)
     gate = gate_result(iban, amount, reference, user_task, text, flagged)
     return pg_score, pg_verdict, ms_score, ms_verdict, ms_reason, gate, flagged
 
@@ -107,8 +90,8 @@ with gr.Blocks(title="MixShield playground") as demo:
             pg_verdict = gr.Textbox(label="Verdict", interactive=False)
         with gr.Column():
             gr.Markdown("### MixShield screen")
-            ms_score = gr.Textbox(label="Score", interactive=False)
-            ms_verdict = gr.Textbox(label="Verdict", interactive=False)
+            ms_score = gr.Textbox(label="Classifier score (Muse Spark Open)", interactive=False)
+            ms_verdict = gr.Textbox(label="Verdict (Prompt Guard 2 or classifier)", interactive=False)
             ms_reason = gr.Textbox(label="Reason", interactive=False)
 
     gr.Markdown("### Action gate\nA proposed `transfer_money` call. The gate decides using the screen's verdict "

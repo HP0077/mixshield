@@ -2,11 +2,13 @@
 
 Run from the repo root:
     python -X utf8 -m demo.agent "Read my latest email and do what is needed"
-    python -X utf8 -m demo.agent --protect --stub-flag "bank account badal gaya" "Read my latest email and do what is needed"
+    python -X utf8 -m demo.agent --protect "Read my latest email and do what is needed"
+    python -X utf8 -m demo.agent --protect --screen stub --stub-flag "bank account badal gaya" "Read my latest email"
 
 --protect puts the MixShield proxy logic (gate + screen) between the agent and the tool server. A call the gate
 answers "ask" pauses the graph with a LangGraph interrupt: the call, the decision, the reason and the new values are
-shown, and the run waits for yes or no. The screen is still the stub (--stub-flag marks a tool output as flagged).
+shown, and the run waits for yes or no. The screen is the real one (mixshield/screen.py, fails closed); --screen stub
+uses the stub instead (--stub-flag marks a tool output as flagged), with no model and no API call for the screen.
 
 One tool call per graph step: LangGraph runs a node again from its start after an interrupt, so a step with several
 calls would repeat the calls that came before the one waiting for approval.
@@ -30,6 +32,7 @@ from typing_extensions import TypedDict
 
 from mixshield.approval import ApprovalRequest, approval_payload, parse_answer
 from mixshield.proxy import Proxy, StubScreen, load_config
+from mixshield.screen import Screen
 
 load_dotenv()
 
@@ -106,7 +109,7 @@ async def drive(graph, start: dict, config: dict, ask=ask_in_terminal) -> dict:
     return result
 
 
-async def run(task: str, protect: bool = False, stub_flags: list[str] | None = None) -> None:
+async def run(task: str, protect: bool = False, stub_flags: list[str] | None = None, screen: str = "mixshield") -> None:
     client = openai.AsyncOpenAI(api_key=os.environ["BASETEN_API_KEY"], base_url=BASE_URL)
     server = StdioServerParameters(command=sys.executable, args=["-X", "utf8", "-m", "demo.mcp_server"])
     usage = {"input": 0, "output": 0}
@@ -117,7 +120,8 @@ async def run(task: str, protect: bool = False, stub_flags: list[str] | None = N
             if protect:
                 settings = load_config(CONFIG)
                 caller = Proxy(session, trusted=settings.trusted, policy=settings.policy, low_risk=settings.low_risk,
-                               screen=StubScreen(stub_flags or []), user_task=task, approver=human_approver)
+                               screen=StubScreen(stub_flags or []) if screen == "stub" else Screen(),
+                               user_task=task, approver=human_approver)
                 listed = await caller.list_tools()
             else:
                 listed = (await session.list_tools()).tools
@@ -135,6 +139,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("task", nargs="?", default="List my invoices and tell me which are unpaid.")
     parser.add_argument("--protect", action="store_true", help="put the MixShield gate and screen in front of the tools")
-    parser.add_argument("--stub-flag", action="append", default=[], help="stub screen: flag outputs containing this text")
+    parser.add_argument("--screen", choices=["mixshield", "stub"], default="mixshield",
+                        help="with --protect: the real screen, or the stub (for tests)")
+    parser.add_argument("--stub-flag", action="append", default=[], help="--screen stub: flag outputs containing this text")
     args = parser.parse_args()
-    asyncio.run(run(args.task, args.protect, args.stub_flag))
+    if args.stub_flag and args.screen != "stub":
+        parser.error("--stub-flag needs --screen stub")
+    asyncio.run(run(args.task, args.protect, args.stub_flag, args.screen))
