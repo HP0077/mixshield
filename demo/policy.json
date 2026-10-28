@@ -1,0 +1,11 @@
+{
+  "policy": {
+    "transfer_money": {"iban": "destination", "reference": "text"},
+    "send_email": {"to": "destination", "subject": "text", "body": "text"}
+  },
+  "trusted": [
+    "ZZ00DEMO0000000001",
+    "ZZ00DEMO0000000002",
+    "ZZ00DEMO0000000003"
+  ]
+}

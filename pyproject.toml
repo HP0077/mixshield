@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mixshield"
+version = "0.1.0"
+description = "Guardrail for tool-using AI agents against indirect prompt injection in English, Hindi and Hinglish"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Huzaifa Pathan" }]
+
+# Library needs: the Muse Spark Open classifier is called with the OpenAI SDK; keys are read from .env.
+# Lower bounds are the versions in requirements.txt (the exact record of what the results were run with); each
+# dependency is capped below its next major version, because a major release can break the API (mcp 2 renamed FastMCP).
+dependencies = [
+    "openai>=3.39.0,<4",
+    "python-dotenv>=1.2.4,<2",
+]
+
+[project.scripts]
+mixshield = "mixshield.cli:main"
+
+[project.optional-dependencies]
+# Prompt Guard 2 and Llama Guard 3 (Hugging Face models; large downloads at first use).
+guards = [
+    "torch>=2.14.1,<3",
+    "transformers>=5.21.0,<6",
+]
+# Benchmark code in bench/ (AgentDojo is pinned: the benchmark version is fixed). For E2 also install "guards".
+bench = [
+    "agentdojo==0.1.35",
+]
+# MCP proxy (mixshield proxy).
+proxy = [
+    "mcp>=1.30.0,<2",
+]
+# Demo agent and MCP server in demo/.
+demo = [
+    "langgraph>=1.2.18,<2",
+    "mcp>=1.30.0,<2",
+]
+dev = [
+    "pytest>=9.2.0,<10",
+]
+all = [
+    "mixshield[guards,bench,proxy,demo,dev]",
+]
+
+[tool.setuptools.packages.find]
+include = ["mixshield*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]  # tests import bench.*, which is not part of the installed package

@@ -64,6 +64,8 @@ class SystemRoleOpenAILLM(OpenAILLM):
         self.budget = None
 
     def query(self, query, runtime, env=EmptyEnv(), messages=[], extra_args={}):
+        if self.budget is not None:
+            self.budget.check()  # stop before paying for a call when another thread used up the budget
         openai_messages = []
         for message in messages:
             converted = _message_to_openai(message, self.model)
