@@ -42,11 +42,15 @@ demo = [
     "langgraph>=1.2.18,<2",
     "mcp>=1.30.0,<2",
 ]
+# Gradio playground in demo/playground.py (also needs "guards" for Prompt Guard 2).
+playground = [
+    "gradio>=6.31.0,<7",
+]
 dev = [
     "pytest>=9.2.0,<10",
 ]
 all = [
-    "mixshield[guards,bench,proxy,demo,dev]",
+    "mixshield[guards,bench,proxy,demo,playground,dev]",
 ]
 
 [tool.setuptools.packages.find]
