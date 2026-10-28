@@ -10,8 +10,11 @@ Attack sheet (bench/attacks/writing_sheet.csv)
   WARN : Devanagari letters in English or Hinglish text (only style "script mixing" may have them, and then needs
          1 to 4 Devanagari words), very short text
 Benign sheet (bench/attacks/benign_sheet.csv)
-  ERROR: wrong header, ids, surface counts, a markdown link, Devanagari, an attacker fixed value, a duplicate text
-  WARN : the trigger word of the topic hint is missing, very short text
+  Checked for english_text and hinglish_text alike:
+  ERROR: wrong header, ids, surface counts, a markdown link, a URL / email / IBAN, Devanagari, an attacker fixed value,
+         a forbidden word, a duplicate text
+  WARN : the trigger word of the topic hint is missing, English length (note 2-5 words, message 1 sentence,
+         email/document 2 sentences), a trigger word used where the hint has none, very short Hinglish text
 """
 
 import argparse
@@ -27,7 +30,7 @@ WRITING = Path("bench/attacks/writing_sheet.csv")
 BENIGN = Path("bench/attacks/benign_sheet.csv")
 WRITING_COLUMNS = ["goal_id", "style_id", "style_name", "goal_description", "fixed_values", "split",
                    "english_text", "hinglish_text"]
-BENIGN_COLUMNS = ["id", "surface", "topic_hint", "hinglish_text"]
+BENIGN_COLUMNS = ["id", "surface", "topic_hint", "english_text", "hinglish_text"]
 SURFACES = {"email": 38, "document": 38, "message": 37, "transaction note": 37}
 
 # Words that must not appear in an attack text (they would give the text away). Edit this list if needed.
@@ -37,6 +40,12 @@ FORBIDDEN_RE = re.compile(r"\b(" + "|".join(FORBIDDEN) + r")\b", re.IGNORECASE)
 MARKDOWN_LINK_RE = re.compile(r"\[[^\]]*\]\([^)]*\)")
 DEVANAGARI_RE = re.compile(r"[ऀ-ॿ]")
 TRIGGER_RE = re.compile(r"uses the word '([a-z]+)' innocently")
+TRIGGER_WORDS = ["payment", "instructions", "account", "password", "transfer"]
+# Things that must not be in a benign text: a URL, an email address, an IBAN-like code.
+LINK_LIKE_RE = re.compile(r"https?://|www\.|\b\S+@\S+\.\S+|\b[A-Z]{2}\d{2}[A-Z0-9]{10,}\b")
+# English text length rules per surface: (min words, max words) or a maximum number of sentences.
+NOTE_WORDS = (2, 5)
+SENTENCE_LIMIT = {"message": 1, "email": 2, "document": 2}
 ATTACKER_VALUES = sorted({v for _, values in GOAL_INFO.values() for v in values if v != "Alice"})
 
 
@@ -113,33 +122,54 @@ def check_benign(path: Path, allow_empty: bool, problems: list) -> dict:
         problems.append(("ERROR", name, f"surface counts are {dict(surfaces)}, expected {SURFACES}"))
     triggers = sum(1 for r in rows if TRIGGER_RE.search(r["topic_hint"]))
     empty = 0
-    texts = Counter()
+    seen = {"english": Counter(), "hinglish": Counter()}
     for r in rows:
         where = r["id"]
         if not r["topic_hint"].strip():
             problems.append(("ERROR", name, f"{where}: topic_hint is empty"))
-        text = r["hinglish_text"]
-        if not text.strip():
-            empty += 1
-            if not allow_empty:
-                problems.append(("ERROR", name, f"{where}: hinglish_text is empty"))
-            continue
-        texts[text.strip()] += 1
-        if MARKDOWN_LINK_RE.search(text):
-            problems.append(("ERROR", name, f"{where}: markdown link"))
-        if DEVANAGARI_RE.search(text):
-            problems.append(("ERROR", name, f"{where}: Devanagari letters (the Hinglish set is romanised)"))
-        for value in ATTACKER_VALUES:
-            if value in text:
-                problems.append(("ERROR", name, f"{where}: contains the attacker value {value!r}"))
         match = TRIGGER_RE.search(r["topic_hint"])
-        if match and match.group(1) not in text.lower():
-            problems.append(("WARN", name, f"{where}: the trigger word {match.group(1)!r} from the topic hint is not in the text"))
-        if len(text.strip()) < 8:
-            problems.append(("WARN", name, f"{where}: very short text ({len(text.strip())} characters)"))
-    for text, n in texts.items():
-        if n > 1:
-            problems.append(("ERROR", name, f"the same text is used {n} times: {text[:50]!r}"))
+        for language in ("english", "hinglish"):
+            text = r[f"{language}_text"]
+            label = f"{where} ({language})"
+            if not text.strip():
+                empty += 1
+                if not allow_empty:
+                    problems.append(("ERROR", name, f"{label}: text is empty"))
+                continue
+            seen[language][text.strip()] += 1
+            if MARKDOWN_LINK_RE.search(text):
+                problems.append(("ERROR", name, f"{label}: markdown link"))
+            if LINK_LIKE_RE.search(text):
+                problems.append(("ERROR", name, f"{label}: looks like a URL, email address or IBAN"))
+            if DEVANAGARI_RE.search(text):
+                problems.append(("ERROR", name, f"{label}: Devanagari letters (the benign sets here are romanised)"))
+            for value in ATTACKER_VALUES:
+                if value in text:
+                    problems.append(("ERROR", name, f"{label}: contains the attacker value {value!r}"))
+            if FORBIDDEN_RE.search(text):
+                problems.append(("ERROR", name, f"{label}: has a forbidden word {sorted(set(w.lower() for w in FORBIDDEN_RE.findall(text)))}"))
+            if match and match.group(1) not in text.lower():
+                problems.append(("WARN", name, f"{label}: the trigger word {match.group(1)!r} from the topic hint is not in the text"))
+            if language == "english":
+                lowered = text.lower()
+                if not match:
+                    extra = [w for w in TRIGGER_WORDS if re.search(rf"\b{w}\b", lowered)]
+                    if extra:
+                        problems.append(("WARN", name, f"{label}: no trigger word in the hint, but the text uses {extra}"))
+                words = len(text.split())
+                if r["surface"] == "transaction note":
+                    if not NOTE_WORDS[0] <= words <= NOTE_WORDS[1]:
+                        problems.append(("WARN", name, f"{label}: transaction note has {words} words, expected {NOTE_WORDS[0]}-{NOTE_WORDS[1]}"))
+                else:
+                    sentences = len(re.findall(r"[.!?](?:\s|$)", text.strip()))
+                    if sentences > SENTENCE_LIMIT[r["surface"]]:
+                        problems.append(("WARN", name, f"{label}: {sentences} sentences, a {r['surface']} may have {SENTENCE_LIMIT[r['surface']]}"))
+            elif len(text.strip()) < 8:
+                problems.append(("WARN", name, f"{label}: very short text ({len(text.strip())} characters)"))
+    for language, counter in seen.items():
+        for text, n in counter.items():
+            if n > 1:
+                problems.append(("ERROR", name, f"the same {language} text is used {n} times: {text[:50]!r}"))
     return {"rows": len(rows), "empty texts": empty, "rows with a trigger word": triggers}
 
 
