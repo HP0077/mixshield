@@ -6,7 +6,7 @@ import pytest
 
 from mixshield import Shield
 from mixshield.screen import (SCREEN_PROMPT, MuseSparkOpenClassifier, Screen, ScreenVerdict, guess_language,
-                              parse_screen)
+                              parse_screen, ranking_score)
 
 IBAN_OK = "ZZ00DEMO0000000001"
 IBAN_NEW = "ZZ00DEMO0000000099"
@@ -25,17 +25,19 @@ class FakeGuard:
 
 
 class FakeClassifier:
-    def __init__(self, score=0.0, reason="ordinary message"):
-        self.value, self.reason, self.seen = score, reason, []
+    """value: (flagged, score) or an exception to raise."""
+
+    def __init__(self, value=(False, 1.0), reason="ordinary message"):
+        self.value, self.reason, self.seen = value, reason, []
 
     def __call__(self, text):
         self.seen.append(text)
         if isinstance(self.value, Exception):
             raise self.value
-        return self.value, self.reason
+        return *self.value, self.reason
 
 
-def screen(pg=0.0, cls=0.0, **kwargs):
+def screen(pg=0.0, cls=(False, 1.0), **kwargs):
     return Screen(prompt_guard=FakeGuard(pg), classifier=FakeClassifier(cls, "asks to pay a new account"), **kwargs)
 
 
@@ -51,26 +53,41 @@ def test_screen_prompt_is_unchanged_and_shared_with_e2():
 
 # ---- decision ---------------------------------------------------------------------------------------------------
 
-def test_not_flagged_when_both_scores_are_low():
-    v = screen(0.1, 0.2)("Friday ko meeting hai.")
-    assert not v.flagged and v.score == 0.2 and v.reason == "asks to pay a new account"
-    assert (v.prompt_guard_score, v.classifier_score) == (0.1, 0.2)
+def test_not_flagged_when_prompt_guard_is_low_and_classifier_says_no():
+    v = screen(0.1, (False, 0.8))("Friday ko meeting hai.")
+    assert not v.flagged and v.reason == "asks to pay a new account"
+    assert v.classifier_flagged is False and v.classifier_raw_score == 0.8
+    assert v.classifier_score == pytest.approx(0.2) and v.score == pytest.approx(0.2)  # p = 1 - score
+    assert v.prompt_guard_score == 0.1
+
+
+def test_classifier_verdict_is_its_flagged_field_not_its_score():
+    # The 30 Oct bug: the model answers flagged=false with score 1.0 ("sure it is clean"). Not flagged, p = 0.
+    v = screen(0.0, (False, 1.0))("Cafeteria menu for the week.")
+    assert not v.flagged and v.classifier_score == 0.0 and v.classifier_raw_score == 1.0
+    # flagged=true with a low score still flags; p is the score.
+    v = screen(0.0, (True, 0.3))("x")
+    assert v.flagged and v.classifier_score == 0.3 and "asks to pay a new account" in v.reason
+
+
+@pytest.mark.parametrize("flagged, score, p", [(True, 0.9, 0.9), (True, 0.2, 0.2), (False, 0.9, 0.1), (False, 0.0, 1.0)])
+def test_ranking_score(flagged, score, p):
+    assert ranking_score(flagged, score) == pytest.approx(p)
 
 
 def test_flagged_by_prompt_guard_alone():
-    v = screen(0.9, 0.1)("x")
+    v = screen(0.9, (False, 0.9))("x")
     assert v.flagged and v.score == 0.9 and "Prompt Guard 2 score 0.90" in v.reason
 
 
 def test_flagged_by_classifier_alone_with_its_reason():
-    v = screen(0.1, 0.8)("x")
+    v = screen(0.1, (True, 0.8))("x")
     assert v.flagged and v.score == 0.8 and "asks to pay a new account" in v.reason
 
 
-def test_threshold_is_inclusive_and_configurable():
-    assert screen(0.5, 0.0)("x").flagged  # placeholder default 0.5, score >= threshold flags
-    assert not screen(0.5, 0.0, pg_threshold=0.6)("x").flagged
-    assert screen(0.0, 0.3, classifier_threshold=0.3)("x").flagged
+def test_prompt_guard_threshold_is_inclusive_and_configurable():
+    assert screen(0.5)("x").flagged  # placeholder default 0.5, score >= threshold flags
+    assert not screen(0.5, pg_threshold=0.6)("x").flagged
 
 
 def test_both_detectors_get_the_normalised_text():
@@ -82,10 +99,11 @@ def test_both_detectors_get_the_normalised_text():
 # ---- fail closed ------------------------------------------------------------------------------------------------
 
 @pytest.mark.parametrize("pg, cls, broken", [
-    (RuntimeError("no model"), 0.0, "Prompt Guard 2 (RuntimeError)"),
+    (RuntimeError("no model"), (False, 1.0), "Prompt Guard 2 (RuntimeError)"),
     (0.0, ConnectionError("down"), "classifier (ConnectionError)"),
-    (0.0, 1.5, "classifier (ValueError)"),  # score outside 0..1
-    (float("nan"), 0.0, "Prompt Guard 2 (ValueError)"),
+    (0.0, (True, 1.5), "classifier (ValueError)"),  # score outside 0..1
+    (0.0, ("false", 1.0), "classifier (ValueError)"),  # flagged is not a bool
+    (float("nan"), (False, 1.0), "Prompt Guard 2 (ValueError)"),
 ])
 def test_fails_closed_when_a_detector_is_unavailable(pg, cls, broken):
     v = Screen(prompt_guard=FakeGuard(pg), classifier=FakeClassifier(cls))("hello")
@@ -102,28 +120,48 @@ def test_fails_closed_when_prompt_guard_cannot_load(monkeypatch):
     def no_model():
         raise OSError("model not downloaded")
     monkeypatch.setattr("mixshield.screen.load_prompt_guard", no_model)
-    v = Screen(classifier=FakeClassifier(0.0))("hello")
+    v = Screen(classifier=FakeClassifier())("hello")
     assert v.flagged and "Prompt Guard 2 (OSError)" in v.reason and v.prompt_guard_score is None
 
 
-def fake_client(reply):
-    message = SimpleNamespace(content=reply)
-    response = SimpleNamespace(choices=[SimpleNamespace(message=message)],
+def fake_client(*replies):
+    """Gives the replies in order; the last one repeats. .calls counts the requests."""
+    client = SimpleNamespace(calls=0)
+
+    def create(**kwargs):
+        reply = replies[min(client.calls, len(replies) - 1)]
+        client.calls += 1
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=reply))],
                                usage=SimpleNamespace(prompt_tokens=100, completion_tokens=7))
-    create = lambda **kwargs: response  # noqa: E731
-    return SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    client.chat = SimpleNamespace(completions=SimpleNamespace(create=create))
+    return client
 
 
 def test_classifier_reads_the_json_reply_and_counts_tokens():
-    classifier = MuseSparkOpenClassifier(client=fake_client('thinking... {"flagged": true, "score": 0.7, "reason": "r"}'))
-    assert classifier("t") == (0.7, "r")
-    assert (classifier.input_tokens, classifier.output_tokens) == (100, 7)
+    client = fake_client('thinking... {"flagged": true, "score": 0.7, "reason": "r"}')
+    classifier = MuseSparkOpenClassifier(client=client)
+    assert classifier("t") == (True, 0.7, "r")
+    assert (classifier.input_tokens, classifier.output_tokens, client.calls) == (100, 7, 1)
 
 
-def test_reply_without_json_fails_closed():
-    classifier = MuseSparkOpenClassifier(client=fake_client("I cannot answer that."))
+def test_empty_reply_is_retried_once():
+    client = fake_client("", '{"flagged": false, "score": 1.0, "reason": "menu"}')
+    classifier = MuseSparkOpenClassifier(client=client)
+    assert classifier("t") == (False, 1.0, "menu")
+    assert client.calls == 2 and classifier.input_tokens == 200
+
+
+def test_parse_screen_rejects_a_flagged_value_that_is_not_true_or_false():
+    with pytest.raises(ValueError):
+        parse_screen('{"flagged": "false", "score": 0.1, "reason": "r"}')
+
+
+@pytest.mark.parametrize("reply", ["I cannot answer that.", ""])
+def test_reply_without_json_twice_fails_closed(reply):
+    client = fake_client(reply)
+    classifier = MuseSparkOpenClassifier(client=client)
     v = Screen(prompt_guard=FakeGuard(0.0), classifier=classifier)("hello")
-    assert v.flagged and "classifier (ValueError)" in v.reason
+    assert v.flagged and "classifier (ValueError)" in v.reason and client.calls == 2
 
 
 # ---- language guess ---------------------------------------------------------------------------------------------
@@ -142,7 +180,7 @@ def test_guess_language(text, language):
 
 def test_language_never_changes_the_decision():
     texts = ["Please pay the new account.", EMAIL, "कृपया नए खाते में पैसे भेज दीजिए।"]
-    verdicts = [screen(0.3, 0.6)(t) for t in texts]
+    verdicts = [screen(0.3, (True, 0.6))(t) for t in texts]
     assert [v.language for v in verdicts] == ["en", "hinglish", "hi"]
     assert {(v.flagged, v.score) for v in verdicts} == {(True, 0.6)}
 
@@ -213,7 +251,7 @@ def test_shield_fails_closed_when_the_screen_is_unavailable():
 def test_proxy_with_real_screen_class_blocks_after_flagged_email():
     pytest.importorskip("mcp")
     from tests.test_proxy import EMAIL_TEXT, make_proxy, text_of
-    classifier = lambda text: (0.9, "asks to pay a new account") if "badal gaya" in text else (0.0, "")  # noqa: E731
+    classifier = lambda text: (True, 0.9, "asks to pay a new account") if "badal gaya" in text else (False, 1.0, "")  # noqa: E731
     upstream, proxy = make_proxy(screen=Screen(prompt_guard=FakeGuard(0.0), classifier=classifier))
     read = asyncio.run(proxy.call_tool("read_email", {"email_id": 3}))
     assert EMAIL_TEXT in text_of(read) and "asks to pay a new account" in text_of(read)

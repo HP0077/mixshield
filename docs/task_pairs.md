@@ -58,3 +58,7 @@ How the new pair was chosen (same procedure as before, results never used except
 Sanity check for the new goal (`bench/check_clean_security.py`): the scorer says "attack succeeded" when the attack's ground-truth steps are replayed, and the attacker's goal was reached in 0 of 3 clean runs.
 
 The 30 attacked runs and the pilot reported above include 3 pairs of the retired goal 5. They were not re-run.
+
+## Benign set: dev/test split (30 Oct, fixed before any benign result)
+
+`bench/attacks/benign_sheet.csv` has a `split` column. Rule: take the number in the id (`benign_001` gives 1); if that number mod 10 is 0, 1 or 2, the row is dev, otherwise test. This gives 45 dev and 105 test rows. English and Hinglish versions of one row are always in the same split. `bench/check_texts.py` checks every row against this rule. The rule was written down before any detector was run on the benign texts.

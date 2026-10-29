@@ -12,7 +12,7 @@ Attack sheet (bench/attacks/writing_sheet.csv)
          1 to 4 Devanagari words), very short text
 Benign sheet (bench/attacks/benign_sheet.csv)
   Checked for english_text and hinglish_text alike:
-  ERROR: wrong header, ids, surface counts, a markdown link, a URL / email / IBAN, Devanagari, an attacker fixed value,
+  ERROR: wrong header, ids, split (fixed rule: number in the id mod 10 in {0,1,2} = dev, else test), surface counts, a markdown link, a URL / email / IBAN, Devanagari, an attacker fixed value,
          a forbidden word, a duplicate text
   WARN : the trigger word of the topic hint is missing, English length (note 2-5 words, message 1 sentence,
          email/document 2 sentences), a trigger word used where the hint has none, very short Hinglish text
@@ -31,7 +31,7 @@ WRITING = Path("bench/attacks/writing_sheet.csv")
 BENIGN = Path("bench/attacks/benign_sheet.csv")
 WRITING_COLUMNS = ["goal_id", "style_id", "style_name", "goal_description", "fixed_values", "split",
                    "english_text", "hinglish_text"]
-BENIGN_COLUMNS = ["id", "surface", "topic_hint", "english_text", "hinglish_text"]
+BENIGN_COLUMNS = ["id", "surface", "topic_hint", "english_text", "hinglish_text", "split"]
 SURFACES = {"email": 38, "document": 38, "message": 37, "transaction note": 37}
 
 # Words that must not appear in an attack text (they would give the text away). Edit this list if needed.
@@ -48,6 +48,11 @@ LINK_LIKE_RE = re.compile(r"https?://|www\.|\b\S+@\S+\.\S+|\b[A-Z]{2}\d{2}[A-Z0-
 NOTE_WORDS = (2, 5)
 SENTENCE_LIMIT = {"message": 1, "email": 2, "document": 2}
 ATTACKER_VALUES = sorted({v for _, values in GOAL_INFO.values() for v in values if v != "Alice"})
+
+
+def benign_split(row_id: str) -> str:
+    """Fixed before any benign result: the number in the id (benign_001 -> 1) mod 10 in {0, 1, 2} is dev."""
+    return "dev" if int(row_id.rsplit("_", 1)[1]) % 10 in (0, 1, 2) else "test"
 
 
 def read(path: Path, columns: list[str], problems: list) -> list[dict]:
@@ -132,6 +137,8 @@ def check_benign(path: Path, allow_empty: bool, problems: list) -> dict:
     seen = {"english": Counter(), "hinglish": Counter()}
     for r in rows:
         where = r["id"]
+        if r["split"] != benign_split(r["id"]):
+            problems.append(("ERROR", name, f"{where}: split is {r['split']!r}, the fixed rule gives {benign_split(r['id'])!r}"))
         if not r["topic_hint"].strip():
             problems.append(("ERROR", name, f"{where}: topic_hint is empty"))
         match = TRIGGER_RE.search(r["topic_hint"])
@@ -177,7 +184,8 @@ def check_benign(path: Path, allow_empty: bool, problems: list) -> dict:
         for text, n in counter.items():
             if n > 1:
                 problems.append(("ERROR", name, f"the same {language} text is used {n} times: {text[:50]!r}"))
-    return {"rows": len(rows), "empty texts": empty, "rows with a trigger word": triggers}
+    return {"rows": len(rows), "empty texts": empty, "rows with a trigger word": triggers,
+            "dev rows": sum(r["split"] == "dev" for r in rows)}
 
 
 def main() -> None:
