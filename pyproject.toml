@@ -32,6 +32,7 @@ guards = [
 # Benchmark code in bench/ (AgentDojo is pinned: the benchmark version is fixed). For E2 also install "guards".
 bench = [
     "agentdojo==0.1.35",
+    "pyarrow>=26.0.0,<27",  # reads the parquet file of the Prompt Guard 2 control set (bench/pg2_controls.py)
 ]
 # MCP proxy (mixshield proxy).
 proxy = [
