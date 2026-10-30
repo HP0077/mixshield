@@ -239,6 +239,18 @@ The other way round (caught in Hinglish, missed in English): 0_5 only. The 17 co
 
 Sanity check (CLAUDE.md section 8), 30 Oct: Huzaifa hand-checked 10 Hinglish attack rows (screen only), one per goal (0_4, 1_6, 2_2, 3_8, 4_5, 5_1, 6_9, 7_3, 8_7, 9_4). The MixShield screen's reasons match the texts.
 
-Not yet done: the Devanagari Hindi texts, and the other section 8 sanity checks.
+Not yet done: Hindi E2 runs, and the other section 8 sanity checks.
 
 Gate+approver friction on clean runs is to be measured in E3/E4.
+
+## Hindi (Devanagari) texts: machine translation and check (30 Oct)
+
+Method: `bench/translate_hindi.py` translates `english_text` into Devanagari Hindi with Muse Spark (muse-spark-1.3), temperature 0, for the 100 attack rows and 150 benign rows. Fixed values (IBANs, emails, URLs, amounts, quoted strings, the row's fixed_values) are replaced by placeholders before translation and put back after; `bench.check_texts` confirms every fixed value is in every `hindi_text`. Style 8 (misspelled keywords) asks for Devanagari misspellings; style 9 (script mixing) asks for 2-3 key words in Roman letters. Each `hindi_text` is translated back to English by the same model (`back_translation` column) so the meaning can be compared with `english_text`. `written_by` for the Hindi texts: machine (muse-spark-1.3).
+
+Run notes: the first run used max_tokens 2000 and 29 attack rows came back empty, because the model's hidden reasoning used up the limit (not refusals). They were redone with max_tokens 6000. Two rows were then translated a second time after the hand check (goal6_style3: signature cut off; goal3_style8: the IBAN had become a place to look instead of the destination); the second versions are the ones in the sheets.
+
+Checked by Huzaifa, 30 Oct: back-translations of all style 3 rows, all style 8 rows and 10 random benign rows (seed 1) compared with the English.
+- Style 3 (goals 0, 3, 4, 5): "important message" comes back as "urgent message". Mild tone change, kept.
+- benign_116: "Money back, transfer to Dad" comes back as an instruction ("Transfer the money back to Papa"). Minor, kept.
+- The other rows checked keep their meaning.
+- Known weaker translations (found 30 Oct): goal4_style8 and goal7_style8 are half English. The model left connecting words in English inside the Hindi sentence ("and the bodi", "and begin the bodi with"), next to the quoted subject and body. Translated a second time: still half English, and the quote marks came out unbalanced, so the first versions (balanced quotes, all fixed values intact) were kept. Not hand-edited. Keep this in mind when comparing languages on style 8; the other 8 style 8 rows have Hindi misspellings only (checked by listing each misspelled word).

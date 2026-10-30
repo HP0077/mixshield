@@ -32,6 +32,8 @@ BENIGN = Path("bench/attacks/benign_sheet.csv")
 WRITING_COLUMNS = ["goal_id", "style_id", "style_name", "goal_description", "fixed_values", "split",
                    "english_text", "hinglish_text"]
 BENIGN_COLUMNS = ["id", "surface", "topic_hint", "english_text", "hinglish_text", "split"]
+HINDI_COLUMNS = ["hindi_text", "back_translation"]  # optional, added by bench/translate_hindi.py
+PLACEHOLDER_RE = re.compile(r"\[\[\d+\]\]")
 SURFACES = {"email": 38, "document": 38, "message": 37, "transaction note": 37}
 
 # Words that must not appear in an attack text (they would give the text away). Edit this list if needed.
@@ -58,7 +60,7 @@ def benign_split(row_id: str) -> str:
 def read(path: Path, columns: list[str], problems: list) -> list[dict]:
     with open(path, encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
-        if reader.fieldnames != columns:
+        if reader.fieldnames not in (columns, columns + HINDI_COLUMNS):
             problems.append(("ERROR", path.name, f"columns are {reader.fieldnames}, expected {columns}"))
         rows = list(reader)
     for n, row in enumerate(rows, start=2):  # row 1 is the header
@@ -67,6 +69,20 @@ def read(path: Path, columns: list[str], problems: list) -> list[dict]:
                 problems.append(("ERROR", path.name, f"row {n}, column {column}: leading or trailing whitespace "
                                                      f"(spaces or tabs) {value[:30]!r}"))
     return rows
+
+
+def check_hindi(text: str, values: list[str], where: str, name: str, problems: list) -> None:
+    """hindi_text (back_translation is not checked). Empty = not translated yet, a warning only."""
+    if not text.strip():
+        problems.append(("WARN", name, f"{where}: hindi text is empty"))
+        return
+    for value in values:
+        if value not in text:
+            problems.append(("ERROR", name, f"{where}: hindi text is missing the fixed value {value!r}"))
+    if PLACEHOLDER_RE.search(text):
+        problems.append(("ERROR", name, f"{where}: hindi text still has a placeholder like [[1]]"))
+    if not DEVANAGARI_RE.search(text):
+        problems.append(("ERROR", name, f"{where}: hindi text has no Devanagari letters"))
 
 
 def check_writing(path: Path, allow_empty: bool, problems: list) -> dict:
@@ -108,6 +124,8 @@ def check_writing(path: Path, allow_empty: bool, problems: list) -> dict:
                 problems.append(("ERROR", name, f"{where}: {language} text has the forbidden word(s) {sorted(set(w.lower() for w in bad))}"))
             if len(text.strip()) < 30:
                 problems.append(("WARN", name, f"{where}: {language} text is very short ({len(text.strip())} characters)"))
+        if "hindi_text" in r:
+            check_hindi(r["hindi_text"], values, where, name, problems)
         english, hinglish = texts["english"].strip(), texts["hinglish"].strip()
         if english and english == hinglish:
             problems.append(("ERROR", name, f"{where}: English and Hinglish text are identical"))
@@ -137,6 +155,8 @@ def check_benign(path: Path, allow_empty: bool, problems: list) -> dict:
     seen = {"english": Counter(), "hinglish": Counter()}
     for r in rows:
         where = r["id"]
+        if "hindi_text" in r:
+            check_hindi(r["hindi_text"], [], where, name, problems)
         if r["split"] != benign_split(r["id"]):
             problems.append(("ERROR", name, f"{where}: split is {r['split']!r}, the fixed rule gives {benign_split(r['id'])!r}"))
         if not r["topic_hint"].strip():
