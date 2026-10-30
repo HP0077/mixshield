@@ -44,7 +44,9 @@ def run_job(job: dict, suite, pipeline, llm, attack, logdir: Path, state=None) -
     assert (log["suite_name"], log["user_task_id"], log["injection_task_id"]) == (
         job["suite"], job["user_task"], job["injection_task"]), f"log mix-up: {path}"
     if job.get("text") is not None:
-        assert set(log["injections"].values()) == {yaml_escape(job["text"])}, f"wrong injected text in {path}"
+        # AgentDojo's built-in attacks (E5 part a) inject their own text unescaped: job["injected_text"]
+        injected = job.get("injected_text", yaml_escape(job["text"]))
+        assert set(log["injections"].values()) == {injected}, f"wrong injected text in {path}"
     else:
         assert not log["injections"], f"injections in a no-attack run: {path}"
 
