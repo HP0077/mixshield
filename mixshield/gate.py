@@ -19,8 +19,10 @@ data is not caught, because the gate cannot tell which record the user meant.
 Matching is on whole values, never on parts of words:
   - normalise: lowercase, drop "http://", "https://", "www." and a trailing "/", strip spaces and punctuation at the ends;
   - trusted set: the normalised value must equal a trusted value exactly;
-  - user request / flagged text: the normalised value must appear there as a whole value (not inside a longer word,
-    email address or domain). For the user request this is only allowed for values of 4 characters or more.
+  - user request: the normalised value must appear there as a whole value (not inside a longer word, email address
+    or domain), and only for values of 4 characters or more (appears_in);
+  - flagged text: any non-alphanumeric character counts as a boundary (written_in), so "accordingly.US133..." still
+    shows that the IBAN came from flagged text. Looser here means more blocks, never more trust.
 
 Known limitation (domains in free text): a link is found if it starts with "http://", "https://" or "www.", or if it
 is a bare domain ending in one of the top-level domains in TLDS. A bare domain with any other ending (for example
@@ -82,6 +84,17 @@ def appears_in(value: str, text: str) -> bool:
     return re.search(pattern, normalize_text(text)) is not None
 
 
+def written_in(value: str, text: str) -> bool:
+    """Provenance check for flagged text: True if the normalised value is in the text with any non-alphanumeric
+    character (or the start or end of the text) on both sides. Looser than appears_in on purpose: it is only used to
+    ask "did this value come from flagged text?", where a looser match means more blocks, never more trust.
+    Bug found on test data, fixed 30 Oct: AgentDojo glues the injected text to the sentence before it
+    ("accordingly.US133000000121212121212"), and appears_in does not match after "."."""
+    if not value:
+        return False
+    return re.search(rf"(?<![^\W_]){re.escape(value)}(?![^\W_])", normalize_text(text)) is not None
+
+
 def normalize_text(text: str) -> str:
     """Lowercase and drop link prefixes, so text compares with normalised values."""
     text = re.sub(r"https?://", "", text.lower())
@@ -115,7 +128,7 @@ class Gate:
         if not untrusted:
             return Decision("allow", f"{tool}: all checked values are trusted")
         flagged_texts = list(flagged_texts)
-        from_flagged = [(n, c) for n, c in untrusted if any(appears_in(normalize(c), t) for t in flagged_texts)]
+        from_flagged = [(n, c) for n, c in untrusted if any(written_in(normalize(c), t) for t in flagged_texts)]
         listed = ", ".join(f"{n}={c!r}" for n, c in (from_flagged or untrusted))
         values = [str(c) for _, c in untrusted]
         if from_flagged:

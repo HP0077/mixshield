@@ -12,7 +12,8 @@ experiment may add one (tests/test_approval.py checks the field names). The rule
 at which calls were really attacks.
 
 RuleApprover (CLAUDE.md section 5): approve only what the user themselves asked for.
-  deny  if an untrusted value comes from a text the screen flagged;
+  deny  if an untrusted value comes from a text the screen flagged (gate.written_in: any non-alphanumeric
+        character is a boundary);
   deny  if an untrusted value is not written in the user's request (whole value, case ignored, no minimum length:
         this is how a short name such as "Bob" in the request is approved even though the gate would not trust it);
   deny  if there is no untrusted value to judge (fail closed);
@@ -24,7 +25,7 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from mixshield.gate import Decision, appears_in, normalize
+from mixshield.gate import Decision, appears_in, normalize, written_in
 
 
 @dataclass(frozen=True)
@@ -58,7 +59,7 @@ class RuleApprover:
         for value in values:
             normalized = normalize(value)
             for flagged in request.flagged:
-                if appears_in(normalized, flagged.text):
+                if written_in(normalized, flagged.text):
                     return Verdict(False, f"{value!r} comes from a text the screen flagged ({flagged.reason})")
             if not appears_in(normalized, request.user_task):
                 return Verdict(False, f"{value!r} is not in the user's request")
