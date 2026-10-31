@@ -67,6 +67,10 @@ def one_run(job: dict, name: str, budget: Budget, detectors: Detectors) -> tuple
     pipeline = build_pipeline(llm, f"{llm.name}-{name}", check=check, screen=screen)
     logdir = LOGS / name
     task = suite.get_user_task_by_id(job["user_task"])
+    path = logdir / pipeline.name.replace("/", "_") / job["suite"] / job["user_task"] / "none" / "none.json"
+    # AgentDojo tries to load an old log even with force_rerun, and an empty one (a run stopped by the budget) crashes
+    # that load. The run is redone anyway, so the old log is removed first.
+    path.unlink(missing_ok=True)
     began = time.perf_counter()
     with OutputLogger(str(logdir)):
         utility, _ = run_task_without_injection_tasks(suite, pipeline, task, logdir, True, VERSION)
@@ -89,10 +93,18 @@ def one_run(job: dict, name: str, budget: Budget, detectors: Detectors) -> tuple
     return row, state.events
 
 
-def run_config(name: str, budget: Budget, detectors: Detectors) -> bool:
-    """Returns False if the run must stop (nothing more is started)."""
+def run_config(name: str, budget: Budget, detectors: Detectors, resume: bool = False) -> bool:
+    """Returns False if the run must stop (nothing more is started). resume: keep the finished rows of an earlier
+    run of this config and run only the tasks it did not finish (stopped by budget or not started)."""
     rows, lock = [], threading.Lock()
-    events_file = open(OUT / "events" / f"{name}.jsonl", "w", encoding="utf-8")
+    kept, todo = [], jobs()
+    if resume:
+        with open(OUT / f"e3b_{name}.csv", encoding="utf-8") as f:
+            kept = [r for r in csv.DictReader(f) if r["status"] == "ok"]
+        done_keys = {(r["suite"], r["user_task"]) for r in kept}
+        todo = [j for j in todo if (j["suite"], j["user_task"]) not in done_keys]
+        print(f"{name}: resuming, {len(kept)} finished rows kept, {len(todo)} tasks to run", flush=True)
+    events_file = open(OUT / "events" / f"{name}.jsonl", "a" if resume else "w", encoding="utf-8")
     stop = {"why": ""}
 
     def run_and_keep(job):
@@ -123,17 +135,19 @@ def run_config(name: str, budget: Budget, detectors: Detectors) -> bool:
                   f"{baseten}", flush=True)
         return row
 
-    results = run_parallel(jobs(), run_and_keep, 4, budget)
+    results = run_parallel(todo, run_and_keep, 4, budget)
     events_file.close()
     with open(OUT / f"e3b_{name}.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=FIELDS, extrasaction="ignore")
         writer.writeheader()
+        writer.writerows(kept)
         for job, row, status in results:
             writer.writerow(row or {**job, "config": name, "status": status})
     done = [r for _, r, _ in results if r]
-    print(f"{name}: {len(done)}/77 runs; utility {sum(r['utility'] for r in done)}/{len(done)}; errors "
-          f"{sum(bool(r['error']) for r in done)}{'; STOP: ' + stop['why'] if stop['why'] else ''}", flush=True)
-    return len(done) == 77 and not budget.exhausted
+    print(f"{name}: {len(done) + len(kept)}/77 runs ({len(done)} new); new runs utility "
+          f"{sum(r['utility'] for r in done)}/{len(done)}; errors {sum(bool(r['error']) for r in done)}"
+          f"{'; STOP: ' + stop['why'] if stop['why'] else ''}", flush=True)
+    return len(done) + len(kept) == 77 and not budget.exhausted
 
 
 def stats() -> None:
@@ -164,6 +178,8 @@ def main() -> None:
     parser.add_argument("--max-usd", type=float, help="Muse Spark dollar cap, shared by all configs")
     parser.add_argument("--configs", nargs="+", choices=E3B_CONFIGS, default=E3B_CONFIGS)
     parser.add_argument("--stats", action="store_true")
+    parser.add_argument("--resume", nargs="*", default=[], choices=E3B_CONFIGS,
+                        help="configs whose finished rows are kept; only their missing tasks are run")
     args = parser.parse_args()
     if args.stats:
         return stats()
@@ -172,7 +188,7 @@ def main() -> None:
     budget = Budget(args.max_usd)
     detectors = Detectors(f"e3b_run {' '.join(args.configs)}", cache_dir=OUT / "cache")
     for name in args.configs:
-        if not run_config(name, budget, detectors):
+        if not run_config(name, budget, detectors, resume=name in args.resume):
             print(f"stopped after {name}; configs not run: {args.configs[args.configs.index(name) + 1:]}")
             break
     print(f"Muse Spark spend ${budget.spent_usd:.2f} of ${args.max_usd:.2f}"

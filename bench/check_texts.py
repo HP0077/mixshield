@@ -31,6 +31,8 @@ WRITING = Path("bench/attacks/writing_sheet.csv")
 BENIGN = Path("bench/attacks/benign_sheet.csv")
 WRITING_COLUMNS = ["goal_id", "style_id", "style_name", "goal_description", "fixed_values", "split",
                    "english_text", "hinglish_text"]
+ADAPTIVE = Path("bench/attacks/adaptive_sheet.csv")
+ADAPTIVE_COLUMNS = ["id", "goal_id", "goal_summary", "fixed_values", "strategy", "hinglish_text", "written_by", "notes"]
 BENIGN_COLUMNS = ["id", "surface", "topic_hint", "english_text", "hinglish_text", "split"]
 HINDI_COLUMNS = ["hindi_text", "back_translation"]  # optional, added by bench/translate_hindi.py
 PLACEHOLDER_RE = re.compile(r"\[\[\d+\]\]")
@@ -208,20 +210,54 @@ def check_benign(path: Path, allow_empty: bool, problems: list) -> dict:
             "dev rows": sum(r["split"] == "dev" for r in rows)}
 
 
+def has_value(value: str, text: str) -> bool:
+    """Exact value with no letter or digit glued directly before or after it (punctuation and "_" are fine)."""
+    return re.search(rf"(?<![^\W_]){re.escape(value)}(?![^\W_])", text) is not None
+
+
+def check_adaptive(path: Path, allow_empty: bool, problems: list) -> dict:
+    rows = read(path, ADAPTIVE_COLUMNS, problems)
+    name = path.name
+    if len(rows) != 30:
+        problems.append(("ERROR", name, f"{len(rows)} rows, expected 30"))
+    ids = Counter(r["id"] for r in rows)
+    for value, n in ids.items():
+        if n > 1:
+            problems.append(("ERROR", name, f"id {value} appears {n} times"))
+    empty = 0
+    for r in rows:
+        where = r["id"]
+        values = [v for v in r["fixed_values"].split(" | ") if v]
+        if not values:
+            problems.append(("ERROR", name, f"{where}: fixed_values is empty"))
+        text = r["hinglish_text"]
+        if not text.strip():
+            empty += 1
+            problems.append(("ERROR" if not allow_empty else "WARN", name, f"{where}: hinglish text is empty"))
+            continue
+        for value in values:
+            if not has_value(value, text):
+                problems.append(("ERROR", name, f"{where}: hinglish text is missing the fixed value {value!r} "
+                                                f"(or it has a letter or digit glued to it)"))
+    return {"rows": len(rows), "empty texts": empty}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--allow-empty", action="store_true", help="count empty texts instead of failing")
     parser.add_argument("--writing", type=Path, default=WRITING)
     parser.add_argument("--benign", type=Path, default=BENIGN)
+    parser.add_argument("--adaptive", type=Path, default=ADAPTIVE)
     args = parser.parse_args()
 
     problems: list = []
     writing = check_writing(args.writing, args.allow_empty, problems)
     benign = check_benign(args.benign, args.allow_empty, problems)
+    adaptive = check_adaptive(args.adaptive, args.allow_empty, problems)
     for level, sheet, message in problems:
         print(f"{level:5} {sheet}: {message}")
     errors = sum(1 for level, _, _ in problems if level == "ERROR")
-    print(f"\nattack sheet : {writing}\nbenign sheet : {benign}")
+    print(f"\nattack sheet : {writing}\nbenign sheet : {benign}\nadaptive sheet: {adaptive}")
     print(f"{errors} error(s), {len(problems) - errors} warning(s)")
     sys.exit(1 if errors else 0)
 

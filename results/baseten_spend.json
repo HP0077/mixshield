@@ -1,0 +1,52 @@
+{
+ "baseline_usd": 36.39,
+ "baseline_note": "conservative estimate of Baseten spend up to 30 Oct, from recorded result files (over-counts)",
+ "stop_usd": 65.0,
+ "runs": [
+  {
+   "script": "e3_sanity",
+   "started": "2026-10-30 19:06:39",
+   "usd": 0.347178
+  },
+  {
+   "script": "e3_run e3a mixshield_strict mixshield_trusting mixshield_strict_names mixshield_trusting_names",
+   "started": "2026-10-30 19:43:00",
+   "usd": 1.380852
+  },
+  {
+   "script": "e3_run e4 minus_screen_strict minus_screen_trusting minus_gate minus_approval",
+   "started": "2026-10-30 20:20:13",
+   "usd": 0.00557
+  },
+  {
+   "script": "e3_run e4 minus_screen_strict minus_screen_trusting minus_gate minus_approval",
+   "started": "2026-10-30 20:54:40",
+   "usd": 0.005833
+  },
+  {
+   "script": "e3b smoke test",
+   "started": "2026-10-30 20:57:57",
+   "usd": 0.018817
+  },
+  {
+   "script": "e3b_run none mixshield_strict mixshield_trusting pg2_0.0006 lg3 pg2_0.5",
+   "started": "2026-10-30 21:04:30",
+   "usd": 0.541011
+  },
+  {
+   "script": "e5_run part a pg2_0.5 lg3 mixshield_trusting mixshield_strict",
+   "started": "2026-10-31 00:40:23",
+   "usd": 0.433863
+  },
+  {
+   "script": "e5_run part b pg2_0.5 lg3 mixshield_trusting mixshield_strict",
+   "started": "2026-10-31 00:49:30",
+   "usd": 0.177238
+  },
+  {
+   "script": "e5_run text-detect",
+   "started": "2026-10-31 00:52:32",
+   "usd": 0.59949
+  }
+ ]
+}
