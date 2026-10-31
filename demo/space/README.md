@@ -9,7 +9,7 @@ python_version: "3.13"
 app_file: app.py
 pinned: false
 license: mit
-short_description: Guard for AI agents against Hinglish and Hindi prompt injection
+short_description: "Guards AI agents from Hinglish & Hindi prompt injection"
 ---
 
 # MixShield playground
