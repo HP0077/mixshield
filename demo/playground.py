@@ -203,6 +203,9 @@ with gr.Blocks(title="MixShield playground") as demo:
             b_replay.click(replay_run, inputs=recorded, outputs=view)
             demo.load(lambda: gr.update(choices=recorded_files()), outputs=recorded)
 
+    # Required by the Llama 4 and Llama 3.2 Community Licenses for a service that uses Llama Prompt Guard 2.
+    gr.Markdown("Built with Llama. Uses Llama Prompt Guard 2 (Llama 4 Community License). All data here is fake.")
+
 
 if __name__ == "__main__":
     demo.queue(max_size=20).launch()

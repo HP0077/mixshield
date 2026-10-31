@@ -30,7 +30,7 @@ CAPTION_SIMULATION = ("In our tests (E1), neither Muse Spark nor Muse Spark Open
 BANNER_SIMULATION = "SIMULATION: a scripted agent that obeys any instruction it reads. Not a real model."
 BANNER_REAL = "Real model: Muse Spark Open (Baseten), tools through the MixShield proxy."
 TWO_LAYERS = "Two layers: if the screen misses, the gate still stops untrusted payments."
-FOOTER = "Fake data and fake IBANs. No real money, no real accounts."
+FOOTER = "Fake data and fake IBANs. No real money, no real accounts. Built with Llama."
 
 CSS = """
 <style>
