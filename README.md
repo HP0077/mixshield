@@ -2,7 +2,9 @@
 
 **Hidden instructions written in Hinglish or Hindi slip past today's guards. MixShield catches them before a tool-using AI agent acts on them.**
 
-AI agents read emails, documents and chat messages. A hidden instruction in that text can make an agent send money or data (indirect prompt injection). MixShield is a benchmark (300 attacks and 450 benign texts in English, Hinglish and Hindi) and an open-source guard (a Python library and an MCP proxy).
+![Test split: Llama Guard 3 1B catches 84.3% of attacks in English but 68.6% in Hinglish (McNemar p < 0.001). The MixShield screen catches 99.5% in Hinglish (mean of 3 runs) with 0.0% false alarms on benign Hinglish texts.](results/video/hook_numbers.png)
+
+AI agents read chats, messages, support tickets, emails, documents and web pages. Anyone who can write into that text can hide an instruction in it that makes the agent send money or data (indirect prompt injection), and the attacker chooses the language. MixShield is a benchmark (300 attacks and 450 benign texts in English, Hinglish and Hindi) and an open-source guard (a Python library and an MCP proxy).
 
 - **Detection (test split: 70 attacks and 105 benign texts per language):** Llama Prompt Guard 2 at its default threshold flagged **0 of 70** attacks in every language. Llama Guard 3 1B caught 84.3% in English but **68.6% in Hinglish**. The MixShield screen caught **98.6% / 99.5% / 100.0%** (English / Hinglish / Hindi) with **0.0% / 0.0% / 1.0%** false alarms.
 - **Agents:** Muse Spark and Muse Spark Open were never hijacked (E1: 0 of 536 scorable attacks). So we also tested a scripted worst-case agent (a simulation, not a real model). On the test split it was hijacked in 189 of 189 attacks with no defence and **0 of 189 with MixShield**. On real tasks with Muse Spark, MixShield kept **88.5%** utility (no defence: 92.3%).
