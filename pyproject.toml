@@ -33,6 +33,7 @@ guards = [
 bench = [
     "agentdojo==0.1.35",
     "pyarrow>=26.0.0,<27",  # reads the parquet file of the Prompt Guard 2 control set (bench/pg2_controls.py)
+    "matplotlib>=3.11.2,<4",  # result charts (bench/charts.py)
 ]
 # MCP proxy (mixshield proxy).
 proxy = [

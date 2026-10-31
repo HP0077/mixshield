@@ -638,24 +638,28 @@ E5 shows the trade-off chosen on 30 Oct in practice. Trusting (default, chosen o
 
 **Expert adaptive attacks by a red-teamer who knows MixShield's design: future work.** Part (b) was written by the project author, not a security expert, so it is a weak lower bound on what an adaptive attacker can do.
 
-## Part 4: latency (30 Oct)
+## Part 4: latency (30 Oct, updated 31 Oct)
 
-`python -X utf8 -m bench.latency`, from the E3a/E4/E3b caches and event logs, no new runs. Per text = one tool output; only real detector calls (cache misses), timed inside the cache lock, so waiting for another thread is not included. Prompt Guard 2 and Llama Guard 3 ran on this machine's CPU (no GPU), so their times depend on it; in E3a, Llama Guard 3 ran at the same time as the MixShield process.
+Updated 31 Oct to include E5 cache entries; earlier table used E3a/E4 only (315 screen calls). All numbers below are printed by `python -X utf8 -m bench.latency` (from the caches and event logs, no new runs). Per text = one tool output; only real detector calls (cache misses), timed inside the cache lock, so waiting for another thread is not included. Prompt Guard 2 and Llama Guard 3 ran on this machine's CPU (no GPU), so their times depend on it; in E3a, Llama Guard 3 ran at the same time as the MixShield process. The `results/e3` cache (e3 rows) holds the AgentDojo attack jobs of E3a, E4 and E5; the `results/e3b` cache (e3b rows) is a different measurement: the real tool outputs of the 77 clean E3b tasks with the real Muse Spark agent, a different and smaller set of texts (135), so e3 and e3b rows are not the same sample.
 
-| Per tool output | Texts | Median (s) | p95 (s) |
-| --- | --- | --- | --- |
-| MixShield screen, whole call (E3a/E4) | 315 | 3.83 | 5.92 |
-| of which Muse Spark Open classifier (Baseten) | 315 | 3.04 | 5.00 |
-| MixShield screen, whole call (E3b, real tool outputs) | 135 | 2.61 | 8.38 |
-| of which classifier | 135 | 2.29 | 6.62 |
-| Prompt Guard 2 alone, CPU (E3a / E3b) | 496 / 215 | 0.17 / 0.22 | 0.95 / 6.15 |
-| Llama Guard 3 1B, CPU (E3a / E3b) | 379 / 224 | 5.17 / 5.46 | 8.46 / 53.2 |
+| Per tool output | Texts | Median (s) | p95 (s) | Max (s) |
+| --- | --- | --- | --- | --- |
+| MixShield screen, whole call (e3: E3a/E4/E5) | 597 | 3.47 | 5.92 | 14.5 |
+| of which Muse Spark Open classifier, Baseten (e3) | 597 | 2.94 | 5.16 | 14.4 |
+| of which normalise + Prompt Guard 2 (e3) | 597 | 0.329 | 1.59 | 3.65 |
+| Prompt Guard 2 alone, CPU (e3) | 803 | 0.173 | 0.92 | 28.3 |
+| Llama Guard 3 1B, CPU (e3) | 681 | 4.59 | 8.07 | 18.3 |
+| MixShield screen, whole call (e3b: real tool outputs of clean tasks) | 135 | 2.61 | 8.38 | 28.4 |
+| of which classifier (e3b) | 135 | 2.29 | 6.62 | 23.6 |
+| of which normalise + Prompt Guard 2 (e3b) | 135 | 0.168 | 1.58 | 13.1 |
+| Prompt Guard 2 alone, CPU (e3b) | 215 | 0.218 | 6.15 | 14.5 |
+| Llama Guard 3 1B, CPU (e3b) | 224 | 5.46 | 53.2 | 95 |
 
-| Gate.check_call per decision | Decisions | Median (ms) | p95 (ms) |
-| --- | --- | --- | --- |
-| E3a/E4 | 7,560 | 0.024 | 0.18 |
-| E3b | 954 | 0.007 | 0.077 |
+| Gate.check_call per decision | Decisions | Median (ms) | p95 (ms) | Max (ms) |
+| --- | --- | --- | --- | --- |
+| e3 (all configs with a gate) | 7,560 | 0.024 | 0.18 | 1.76 |
+| e3b | 954 | 0.007 | 0.077 | 0.938 |
 
 E3b runs (Muse Spark, 4 workers, one Baseten request at a time; run time includes waiting for other runs, so it is an upper bound): median run time none 11.3 s, Prompt Guard 2 at 0.5 12.6 s, MixShield trusting 17.4 s, MixShield strict 24.3 s, Llama Guard 3 43.3 s, Prompt Guard 2 at 0.0006 55.1 s. A MixShield run screened a median of 4-5 tool outputs, one after the other.
 
-Reading: the gate costs well under a millisecond. The screen costs about 2.5-4 s per tool output, almost all of it the Baseten classifier call; with outputs screened one by one, a task with 4-5 tool outputs waits roughly 10-20 s extra. That is the main latency cost of MixShield.
+Reading: the gate costs well under a millisecond. The screen costs about 2.5-3.5 s per tool output, almost all of it the Baseten classifier call; with outputs screened one by one, a task with 4-5 tool outputs waits roughly 10-20 s extra. That is the main latency cost of MixShield. The charts (`results/charts/latency.png`) use the e3 rows.
