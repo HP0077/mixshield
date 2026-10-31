@@ -14,7 +14,7 @@ def run_scenario(protect, screen):
 
 
 def kinds(run):
-    return [k for k, _ in run["events"]]
+    return [event[0] for event in run["events"]]
 
 
 def test_flagged_email_is_blocked_and_events_come_in_order():
@@ -55,3 +55,17 @@ def test_a_failing_scenario_becomes_an_error_event():
     for state in scenarios.stream_run(boom, state):
         pass
     assert state["error"] == "RuntimeError: no network" and state["done"]
+
+
+def test_events_are_saved_with_their_times_and_replay_waits_the_recorded_gaps():
+    state = run_scenario(True, StubScreen(["bank account badal gaya"]))
+    times = [event[2] for event in state["events"]]
+    assert len(times) == len(state["events"]) and times == sorted(times)
+    saved = {k: state[k] for k in ("mode", "protected", "banner", "caption", "task", "events")}
+    assert viewer.event_times(saved) == times
+    waits = []
+    frames = [viewer.render(r) for r in scenarios.play(saved, times, 2.0, sleep=waits.append)]
+    assert waits == [(b - a) / 2 for a, b in zip([0.0] + times, times)]
+    assert len(frames) == len(times) + 1
+    assert "Replaying a recorded run at 2x speed" in frames[0] and "Replaying" not in frames[-1]
+    assert "Recorded run" in frames[-1] and viewer.outcome(next(scenarios.play(saved, times, 1.0))) is None

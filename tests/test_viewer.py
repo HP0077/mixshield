@@ -140,3 +140,31 @@ def test_live_run_shows_running_with_a_real_clock_and_the_tool_being_screened():
 def test_recorded_run_has_no_clock():
     run = make(events=[("email", EMAIL), ("done", {})])
     assert "elapsed" not in viewer.render(run) and "Run time" not in viewer.render(run)
+
+
+def test_event_times_are_used_only_when_all_are_saved():
+    events = [["email", EMAIL, 0.5], ["screen", SCREEN_FLAGGED, 3.0]]
+    assert viewer.event_times({"events": events}) == [0.5, 3.0]
+    assert viewer.event_times({"events": [["email", EMAIL]]}) is None  # saved before times were kept
+    assert viewer.event_times({"events": [["email", EMAIL, 2.0], ["done", {}, 1.0]]}) is None  # going backwards
+    assert viewer.event_times({"events": []}) is None
+
+
+def saved_run(mode, protected, events):
+    return {"mode": mode, "protected": protected, "banner": "b", "caption": "", "task": "t", "events": events,
+            "recorded_at": "2026-10-31 09:27 UTC"}
+
+
+def test_run_labels_come_from_the_runs_own_result():
+    missed = {**SCREEN_FLAGGED, "flagged": False}
+    ask = ("gate", {"action": "ask", "reason": "new payee"})
+    block = ("gate", {"action": "block", "reason": "r"})
+    labels = {
+        "direct": viewer.run_label(saved_run("direct", False, [["call", CALL], ["result", {"is_error": False, "text": "ok"}]])),
+        "missed": viewer.run_label(saved_run("simulated", True, [["screen", missed], ["call", CALL], list(ask)])),
+        "flagged": viewer.run_label(saved_run("simulated", True, [["screen", SCREEN_FLAGGED], ["call", CALL], list(block)])),
+    }
+    assert labels["direct"].startswith("Run 1: no MixShield, money sent (31 Oct, 09:27 UTC)")
+    assert labels["missed"].startswith("Run 2: screen missed, needs your OK (31 Oct, 09:27 UTC)")
+    assert labels["flagged"].startswith("Run 2: flagged, blocked")
+    assert all(label.endswith("[no timing]") for label in labels.values())  # these events carry no times
