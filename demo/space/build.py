@@ -28,6 +28,20 @@ def copy(src: Path, dest: Path) -> None:
     shutil.copy2(src, dest)
 
 
+def check_space_files(out: Path) -> None:
+    """Stop if the Space files are not the ZeroGPU ones (a stale build once overwrote them on the Space)."""
+    requirements = (out / "requirements.txt").read_text(encoding="utf-8")
+    readme = (out / "README.md").read_text(encoding="utf-8")
+    app = (out / "app.py").read_text(encoding="utf-8")
+    problems = [text for ok, text in (
+        ("torch==2.13.0" in requirements, "requirements.txt must pin torch==2.13.0"),
+        ("--extra-index-url" not in requirements, "requirements.txt must not have an extra index line"),
+        ('python_version: "3.12"' in readme, 'README.md must have python_version: "3.12"'),
+        ("@spaces.GPU" in app, "app.py must have the @spaces.GPU placeholder")) if not ok]
+    if problems:
+        raise SystemExit("; ".join(problems))
+
+
 def build(out: Path) -> list[Path]:
     if out.exists() and any(out.iterdir()):
         raise SystemExit(f"{out} is not empty")
@@ -41,6 +55,7 @@ def build(out: Path) -> list[Path]:
             copy(src, out / src.relative_to(REPO))
     for name in result_files():
         copy(REPO / "results" / "e2" / name, out / "results" / "e2" / name)
+    check_space_files(out)
     return sorted(p for p in out.rglob("*") if p.is_file())
 
 
