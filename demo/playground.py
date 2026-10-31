@@ -4,7 +4,7 @@ then see what the action gate does with a proposed transfer_money call.
 Two tabs: "Try to fool MixShield" (paste a text, see the screen and the gate) and "Agent through the proxy" (three
 runs of the demo scenario, drawn step by step by demo/viewer.py, which also holds the page's design tokens and CSS).
 
-Run:  python -X utf8 -m demo.playground
+Run:  python -X utf8 -m demo.playground      (a Hugging Face Space runs app.py, built by demo/space/build.py)
 Keys come from environment variables only: MODEL_API_KEY / BASETEN_API_KEY (see bench/adapters.py) and HF_TOKEN.
 Every button that calls a model is rate limited (demo/ratelimit.py). On your own machine, to record many takes:
     $env:DEMO_RATE_LIMIT = "off"; $env:DEMO_SAVE_RUNS = "1"    (PowerShell)
@@ -22,7 +22,7 @@ from demo.mcp_server import EMAILS
 from demo.obedient_client import TASK
 from demo.ratelimit import RateLimiter, visitor_id
 from mixshield.gate import Gate
-from mixshield.screen import Screen, load_prompt_guard
+from mixshield.screen import MuseSparkOpenClassifier, Screen, load_prompt_guard
 
 POLICY_FILE = Path(__file__).parent / "policy.json"
 CONFIG = json.loads(POLICY_FILE.read_text(encoding="utf-8"))
@@ -39,7 +39,9 @@ NORMAL_HINGLISH = ("Namaste Emma, Friday ko 11 baje meeting rakhte hain. Project
 
 DEFAULT_TASK = "Pay invoice INV-102"
 
-SCREEN = Screen()  # the same screen the proxy uses (normalise, Prompt Guard 2, Muse Spark Open; fails closed)
+# The same screen the proxy uses (normalise, Prompt Guard 2, Muse Spark Open; fails closed). A call takes about 3 s, so a
+# short timeout lets a slow Baseten show "screen unavailable" quickly instead of leaving the visitor waiting.
+SCREEN = Screen(classifier=MuseSparkOpenClassifier(timeout=30.0))
 try:
     # Load Prompt Guard 2 now, on the main thread: its first import blocks forever on Windows inside a worker thread
     # (see serve() in mixshield/proxy.py), and Gradio runs the buttons in worker threads.
@@ -209,7 +211,7 @@ with gr.Blocks(title="MixShield", fill_width=True) as demo:
             gr.HTML('<p class="ms-quiet">Run 1 takes about 1 s. Runs 2 and 3 take about 15&ndash;25 s: every tool output is '
                     'checked by Muse Spark Open (about 3 s each), and run 3 also waits for the model to think.</p>')
             view = gr.HTML(value=viewer.render(start_state("simulated")))
-            with gr.Accordion("Replay a recorded run (no network)", open=False):
+            with gr.Accordion("Replay a recorded run (no network, works even if a live run fails)", open=True):
                 recorded = gr.Dropdown(choices=recorded_files(), label="Recorded run")
                 b_replay = gr.Button("Replay")
             b_direct.click(run_direct, outputs=[view, b_direct, b_sim, b_agent], concurrency_limit=2)
@@ -255,5 +257,9 @@ with gr.Blocks(title="MixShield", fill_width=True) as demo:
     gr.HTML(viewer.footer_html())
 
 
+# Theme, CSS, head and js are launch() arguments in Gradio 6. app.py (the Space's entry file) uses the same dict.
+# ssr_mode=False: on Spaces Gradio turns server-side rendering on by default, which is not needed here.
+LAUNCH = dict(theme=THEME, css=PAGE_CSS, head=HEAD, js=FORCE_LIGHT, footer_links=[], ssr_mode=False)
+
 if __name__ == "__main__":
-    demo.queue(max_size=20).launch(theme=THEME, css=PAGE_CSS, head=HEAD, js=FORCE_LIGHT, footer_links=[])
+    demo.queue(max_size=20).launch(**LAUNCH)
