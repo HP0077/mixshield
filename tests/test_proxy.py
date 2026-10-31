@@ -91,6 +91,20 @@ def test_block_after_the_email_is_flagged():
     assert [c[0] for c in upstream.calls] == ["read_email"]
 
 
+def test_every_screened_output_is_logged_with_the_verdict_fields():
+    from mixshield.screen import ScreenVerdict
+
+    def screen(text):
+        return ScreenVerdict(True, 0.9, "hinglish", "new account", 0.001, 0.9, True, 0.9)
+
+    upstream, proxy = make_proxy(screen=screen)
+    run(proxy.call_tool("read_email", {"email_id": 3}))
+    event = next(e for e in proxy.events if e["action"] == "screened")
+    assert event["flagged"] is True and event["language"] == "hinglish"
+    assert event["prompt_guard_score"] == 0.001 and event["classifier_score"] == 0.9
+    assert event["classifier_flagged"] is True
+
+
 def test_unflagged_output_is_not_changed():
     upstream, proxy = make_proxy(screen=StubScreen())
     assert text_of(run(proxy.call_tool("read_email", {"email_id": 3}))) == EMAIL_TEXT
