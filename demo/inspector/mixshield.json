@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "invoices": {
+      "command": "mixshield",
+      "args": ["proxy", "--upstream", "python -X utf8 -m demo.mcp_server", "--config", "demo/policy.json", "--user-task", "Pay invoice INV-102"],
+      "connectionTimeout": 120000
+    }
+  }
+}
