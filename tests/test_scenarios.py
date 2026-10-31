@@ -19,22 +19,32 @@ def kinds(run):
 
 def test_flagged_email_is_blocked_and_events_come_in_order():
     run = run_scenario(True, StubScreen(["bank account badal gaya"]))
-    assert kinds(run) == ["email", "screening", "screen", "call", "gate", "result", "done"]
-    assert run["screen"]["flagged"] is True
-    assert viewer.outcome(run)[:2] == ("red", "BLOCKED")
+    order = [k for k in kinds(run) if k in ("email", "call", "gate", "result", "done")]
+    assert order == ["email", "call", "gate", "result", "done"]
+    assert run["screen"]["flagged"] is True and run["screen"]["email"] is True
+    assert viewer.outcome(run)[:2] == ("red", "Blocked")
+
+
+def test_every_tool_output_is_reported_to_the_screen_step():
+    run = run_scenario(True, StubScreen(["bank account badal gaya"]))
+    tools = {s["tool"] for s in run["screens"]}
+    assert {"read_email"} <= tools and len(run["screens"]) > 1  # the inbox list and the email, not only the email
+    assert run["screening"] is False  # every "screening" start was followed by its "done"
+    assert [s["email"] for s in run["screens"]].count(True) == 1
+    assert "outputs checked, 1 flagged" in viewer.render(run) or "output checked, 1 flagged" in viewer.render(run)
 
 
 def test_unflagged_email_makes_the_gate_ask_and_nothing_is_sent():
     run = run_scenario(True, StubScreen([]))
     assert run["screen"]["flagged"] is False
-    assert viewer.outcome(run)[:2] == ("amber", "NEEDS YOUR OK")
+    assert viewer.outcome(run)[:2] == ("amber", "Needs your OK")
     assert run["result"]["is_error"] is True
 
 
 def test_no_mixshield_sends_the_money():
     run = run_scenario(False, None)
     assert kinds(run) == ["email", "call", "result", "done"]
-    assert viewer.outcome(run)[:2] == ("red", "MONEY SENT")
+    assert viewer.outcome(run)[:2] == ("red", "Money sent")
 
 
 def test_a_failing_scenario_becomes_an_error_event():

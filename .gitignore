@@ -224,3 +224,6 @@ AGENTS.md
 
 # MixShield raw run logs
 results/raw_logs/
+
+# Design review screenshots (local only)
+results/demo/design_screenshots/

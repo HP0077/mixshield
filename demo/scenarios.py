@@ -73,8 +73,8 @@ class DirectCaller:
 
 
 class LiveProxy(Proxy):
-    """The MixShield Proxy, plus a report of each step as it happens: the email arrives, the screen runs and gives
-    its verdict, the payment call is proposed, the gate decides, the tool answers."""
+    """The MixShield Proxy, plus a report of each step as it happens: the email arrives, the screen runs on every tool
+    output and gives its verdicts, the payment call is proposed, the gate decides, the tool answers."""
 
     def __init__(self, *args, emit, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -84,15 +84,14 @@ class LiveProxy(Proxy):
         mail = email_of(result) if name == "read_email" else None
         if mail:
             self.emit("email", mail)
-            self.emit("screening", {})
+        self.emit("screening", {"tool": name})
         start = len(self.events)
         out = await super()._screen_result(name, result)
-        if mail:
-            seen = next((ev for ev in self.events[start:] if ev["action"] == "screened"), None)
-            if seen:
-                self.emit("screen", {"flagged": seen["flagged"], "language": seen["language"],
-                                     "reason": seen["reason"], "prompt_guard_score": seen["prompt_guard_score"],
-                                     "unavailable": seen["reason"].startswith("screen unavailable")})
+        for seen in (ev for ev in self.events[start:] if ev["action"] == "screened"):  # every text, not only emails
+            self.emit("screen", {"flagged": seen["flagged"], "language": seen["language"], "reason": seen["reason"],
+                                 "prompt_guard_score": seen["prompt_guard_score"], "tool": name,
+                                 "email": bool(mail), "unavailable": seen["reason"].startswith("screen unavailable")})
+        self.emit("screening", {"tool": name, "done": True})
         return out
 
     async def call_tool(self, name, arguments):

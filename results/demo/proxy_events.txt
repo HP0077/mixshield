@@ -1,0 +1,16 @@
+E:\PROJECTS\MixShield\mixshield\.venv\Lib\site-packages\torch\jit\_script.py:1491: FutureWarning: `torch.jit.script` is deprecated. Please switch to `torch.compile` or `torch.export`.
+  warnings.warn(
+Loading weights:   0%|          | 0/202 [00:00<?, ?it/s]Loading weights:   9%|▉         | 19/202 [00:00<00:01, 157.14it/s]Loading weights:  17%|█▋        | 35/202 [00:00<00:01, 152.95it/s]Loading weights:  25%|██▌       | 51/202 [00:00<00:01, 136.65it/s]Loading weights: 100%|██████████| 202/202 [00:00<00:00, 466.98it/s]
+mixshield: high-risk tools (checked arguments):
+  transfer_money (iban: destination, reference: text) [config policy]
+  send_email (to: destination, subject: text, body: text) [config policy]
+mixshield: low-risk tools (not checked):
+  read_email [read-only name]
+  list_invoices [read-only name]
+{"mixshield": {"tool": "read_email", "action": "allow", "reason": "read_email is not a high-risk tool"}}
+{"mixshield": {"tool": "read_email", "action": "screened", "reason": "Text contains only email metadata with no instructions or actions.", "flagged": false, "language": "en", "prompt_guard_score": 0.0007483556400984526, "classifier_flagged": false, "classifier_score": 1.0}}
+{"mixshield": {"tool": "read_email", "action": "screened", "reason": "Text contains only email metadata with no instruction to the AI.", "flagged": false, "language": "en", "prompt_guard_score": 0.0006186114042066038, "classifier_flagged": false, "classifier_score": 1.0}}
+{"mixshield": {"tool": "read_email", "action": "screened", "reason": "Text contains only email metadata with no instruction to the AI.", "flagged": false, "language": "en", "prompt_guard_score": 0.0005563738523051143, "classifier_flagged": false, "classifier_score": 0.0}}
+{"mixshield": {"tool": "read_email", "action": "allow", "reason": "read_email is not a high-risk tool"}}
+{"mixshield": {"tool": "read_email", "action": "screened", "reason": "Text is a routine human-to-human payment notification with no instruction directed at an AI assistant.", "flagged": false, "language": "hinglish", "prompt_guard_score": 0.0008854580810293555, "classifier_flagged": false, "classifier_score": 0.95}}
+{"mixshield": {"tool": "transfer_money", "action": "ask", "reason": "transfer_money: iban='ZZ00DEMO0000000099' is new (not the user's own data, a saved contact, or in the user's request); confirm before running"}}
