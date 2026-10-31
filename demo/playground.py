@@ -141,17 +141,69 @@ def run_agent(request: gr.Request):
     yield from start_run("agent", request)
 
 
-def recorded_files() -> list[str]:
-    return sorted((p.name for p in scenarios.RUNS_DIR.glob("*.json")), reverse=True) if scenarios.RUNS_DIR.exists() else []
+def recorded_choices(show_older: bool = False) -> list[tuple[str, str]]:
+    """(label, file name) for each saved run that can be played step by step (it has timestamps). With `show_older`,
+    the older runs without timestamps are listed too (they show the final state only). The label is built from the run's
+    own result (viewer.run_label). Runs are listed as Run 1, 2, 3, newest first within each."""
+    if not scenarios.RUNS_DIR.exists():
+        return []
+    found = []
+    for path in scenarios.RUNS_DIR.glob("*.json"):
+        try:
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            if show_older or viewer.event_times(saved):
+                found.append((viewer.RUN_NUMBER[saved["mode"]], path.name, viewer.run_label(saved)))
+        except (OSError, ValueError, KeyError):
+            continue  # a broken file is left out of the list
+    found.sort(key=lambda item: item[1], reverse=True)  # newest first (file names start with the date)
+    found.sort(key=lambda item: item[0])  # stable: then by run number
+    return [(label, name) for _, name, label in found]
 
 
-def replay_run(name: str | None):
-    """Draw a saved run again. No model, no network: the same viewer over the saved events."""
+def default_recorded(choices: list[tuple[str, str]]) -> str | None:
+    """The newest timed run (it can be played back), in this order of preference: a "screen missed, needs your OK" run
+    (it shows the second layer working), then a "Run 2: flagged, blocked" run, then any timed run. With no timed run at
+    all, the first run in the list."""
+    timed = [(label, name) for label, name in choices if "[no timing]" not in label]
+    newest = lambda items: max(items, key=lambda item: item[1].rsplit("_", 2)[-2:])[1]
+    for wanted in ("screen missed", "Run 2: flagged, blocked"):
+        found = [item for item in timed if wanted in item[0]]
+        if found:
+            return newest(found)
+    return newest(timed) if timed else (choices[0][1] if choices else None)
+
+
+def refresh_recorded(current: str | None, show_older: bool = False):
+    """New choices for the dropdown (a run that just finished is saved by now). The run on show stays selected."""
+    choices = recorded_choices(show_older)
+    return gr.update(choices=choices, value=current if current in {name for _, name in choices} else default_recorded(choices))
+
+
+SPEEDS = {"Real speed": 1.0, "2x": 2.0}
+
+
+def replay_run(name: str | None, speed: str):
+    """Play a saved run again: its real events in order, waiting the recorded gap between them (divided by the speed).
+    No model, no network. A run saved without times cannot be played; its final state is shown, with a note."""
     path = (scenarios.RUNS_DIR / (name or "")).resolve()
+    others = [gr.update()]  # the replay button
     if not name or path.parent != scenarios.RUNS_DIR.resolve() or path.suffix != ".json" or not path.exists():
-        return [viewer.message_html("Choose a recorded run first.")] + buttons(None)
-    run_state = viewer.replay(json.loads(path.read_text(encoding="utf-8")))
-    return [viewer.render(run_state)] + buttons(run_state["mode"] if run_state["mode"] in MODE_ORDER else None)
+        yield [viewer.message_html("Choose a recorded run first.")] + buttons(None) + others
+        return
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    times = viewer.event_times(saved)
+    mode = saved["mode"] if saved["mode"] in MODE_ORDER else None
+    if times is None:
+        run_state = viewer.replay(saved)
+        run_state["replay_note"] = ("This recorded run has no timestamps, so it cannot be played step by step. "
+                                    "Showing the final state.")
+        yield [viewer.render(run_state)] + buttons(mode) + others
+        return
+    factor = SPEEDS.get(speed, SPEEDS["2x"])
+    busy = (buttons(mode, busy=True) if mode else buttons(None)) + [gr.update(interactive=False)]
+    for run_state in scenarios.play(saved, times, factor, PREVIEW_EMAIL if saved["mode"] != "agent" else None):
+        yield [viewer.render(run_state)] + busy
+    yield [viewer.render(run_state)] + buttons(mode) + [gr.update(interactive=True)]
 
 
 HEAD = """
@@ -212,13 +264,19 @@ with gr.Blocks(title="MixShield", fill_width=True) as demo:
                     'checked by Muse Spark Open (about 3 s each), and run 3 also waits for the model to think.</p>')
             view = gr.HTML(value=viewer.render(start_state("simulated")))
             with gr.Accordion("Replay a recorded run (no network, works even if a live run fails)", open=True):
-                recorded = gr.Dropdown(choices=recorded_files(), label="Recorded run")
+                choices = recorded_choices()
+                gr.HTML('<p class="ms-quiet">Pick a recorded run and press Replay to watch it step by step.</p>')
+                recorded = gr.Dropdown(choices=choices, value=default_recorded(choices), label="Recorded run")
+                show_older = gr.Checkbox(label="Show older runs (final state only)", value=False)
+                speed = gr.Radio(list(SPEEDS), value="2x", label="Speed")
                 b_replay = gr.Button("Replay")
-            b_direct.click(run_direct, outputs=[view, b_direct, b_sim, b_agent], concurrency_limit=2)
-            b_sim.click(run_simulated, outputs=[view, b_direct, b_sim, b_agent], concurrency_limit=2)
-            b_agent.click(run_agent, outputs=[view, b_direct, b_sim, b_agent], concurrency_limit=2)
-            b_replay.click(replay_run, inputs=recorded, outputs=[view, b_direct, b_sim, b_agent])
-            demo.load(lambda: gr.update(choices=recorded_files()), outputs=recorded)
+            for button, handler in ((b_direct, run_direct), (b_sim, run_simulated), (b_agent, run_agent)):
+                # When a run ends it has been saved (if DEMO_SAVE_RUNS=1): add it to the list of recorded runs.
+                button.click(handler, outputs=[view, b_direct, b_sim, b_agent], concurrency_limit=2).then(
+                    refresh_recorded, inputs=[recorded, show_older], outputs=recorded)
+            b_replay.click(replay_run, inputs=[recorded, speed], outputs=[view, b_direct, b_sim, b_agent, b_replay])
+            show_older.change(refresh_recorded, inputs=[recorded, show_older], outputs=recorded)
+            demo.load(lambda older: refresh_recorded(None, older), inputs=show_older, outputs=recorded)
 
         with gr.Tab("Try to fool MixShield"):
             gr.HTML('<p class="ms-lede">Write a message in English, Hinglish or Hindi. Can you get an instruction '

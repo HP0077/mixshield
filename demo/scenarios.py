@@ -17,6 +17,7 @@ import os
 import queue
 import sys
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -149,11 +150,13 @@ async def real_agent(emit, screen=None, task: str = REAL_TASK) -> None:
 
 def stream_run(factory, run: dict):
     """Run `factory(emit)` (an async function) in a thread. Yields `run` after every event, ending with 'done'.
-    A failure or a timeout becomes an 'error' event, shown as it is."""
+    A failure or a timeout becomes an 'error' event, shown as it is. Each event in run["events"] gets a third item: the
+    seconds since the run started, taken when the event happened. A recorded run is replayed with these times."""
     events: queue.Queue = queue.Queue()
+    start = time.monotonic()
 
     def emit(kind, data=None):
-        events.put((kind, data))
+        events.put((kind, data, round(time.monotonic() - start, 3)))
 
     def work():
         try:
@@ -164,11 +167,27 @@ def stream_run(factory, run: dict):
 
     threading.Thread(target=work, daemon=True).start()
     while True:
-        kind, data = events.get()
+        kind, data, at = events.get()
         viewer.apply(run, kind, data)
+        run["events"][-1].append(at)
         yield run
         if kind == "done":
             return
+
+
+def play(saved: dict, times: list[float], factor: float, preview=None, sleep=time.sleep):
+    """Replay a saved run: yields the run after the start and after each saved event, first waiting the recorded gap
+    (the difference of the saved times, divided by `factor`). `times` comes from viewer.event_times."""
+    run = viewer.new_run(saved["mode"], saved["protected"], saved["banner"], saved["task"], saved.get("caption", ""),
+                         saved.get("recorded_at", "unknown date"), preview=preview)
+    run["replay_speed"] = "2x speed" if factor == 2.0 else "real speed"
+    yield run
+    previous = 0.0
+    for event, at in zip(saved["events"], times):
+        sleep((at - previous) / factor)
+        previous = at
+        viewer.apply(run, event[0], event[1])
+        yield run
 
 
 def save_run(run: dict) -> Path | None:

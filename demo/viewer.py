@@ -29,6 +29,7 @@ import html
 import json
 import re
 import time
+from datetime import datetime
 
 PG_THRESHOLD = 0.5  # the default Prompt Guard 2 threshold used by the screen (a placeholder, shown as such)
 CURRENCY = "$"  # the demo data has no currency; every amount is shown with this one symbol (the real model also writes "$")
@@ -173,7 +174,7 @@ def new_run(mode: str, protected: bool, banner: str, task: str, caption: str = "
     """`preview` is an email that is waiting in the inbox but has not been read yet; it is drawn with a "Not read yet"
     tag until the agent really reads an email (then the email event takes over)."""
     return {"preview": preview, "t0": None, "took": None, "screen_t0": None, "screening_tool": "", "mode": mode, "protected": protected, "banner": banner, "caption": caption, "task": task,
-            "replay_of": replay_of, "email": None, "screening": False, "screens": [], "screen": None, "call": None,
+            "replay_of": replay_of, "replay_speed": "", "replay_note": "", "email": None, "screening": False, "screens": [], "screen": None, "call": None,
             "gate": None, "result": None, "answer": "", "error": "", "done": False, "events": [], "fresh": []}
 
 
@@ -217,13 +218,55 @@ def apply(run: dict, kind: str, data=None) -> dict:
 
 
 def replay(saved: dict) -> dict:
-    """Rebuild a run from a saved one (its event list), for the recorded-run backup. Drawn at once, no animation."""
+    """Rebuild a run from a saved one (its event list). Drawn at once, no animation: the final state."""
     run = new_run(saved["mode"], saved["protected"], saved["banner"], saved["task"], saved.get("caption", ""),
                   saved.get("recorded_at", "unknown date"))
-    for kind, data in saved["events"]:
-        apply(run, kind, data)
+    for event in saved["events"]:
+        apply(run, event[0], event[1])
     run["fresh"] = []
     return run
+
+
+def event_times(saved: dict) -> list[float] | None:
+    """The seconds-since-start of each saved event (the third item of an event), or None if any is missing or the times
+    go backwards. Runs saved before 1 Nov have no times; they are never given invented ones."""
+    times = []
+    for event in saved.get("events", []):
+        if len(event) < 3 or isinstance(event[2], bool) or not isinstance(event[2], (int, float)):
+            return None
+        times.append(float(event[2]))
+    if not times or any(b < a for a, b in zip(times, times[1:])):
+        return None
+    return times
+
+
+RUN_NUMBER = {"direct": 1, "simulated": 2, "agent": 3}
+
+
+def run_label(saved: dict) -> str:
+    """A readable name for a saved run, built from the run's own result (outcome, screen verdict, gate action)."""
+    run = replay(saved)
+    out = outcome(run)
+    label = out[1] if out else "no result"
+    gate, screen = (run["gate"] or {}).get("action"), run["screen"]
+    if saved["mode"] == "direct":
+        what = "no MixShield, " + label.lower()
+    elif saved["mode"] == "simulated":
+        if gate == "ask" and screen is not None and not screen["flagged"]:
+            what = "screen missed, needs your OK"
+        elif gate and screen is not None and screen["flagged"]:
+            what = "flagged, " + label.lower()
+        else:
+            what = label.lower()
+    else:
+        what = "real model, " + label.lower()
+    head = f"Run {RUN_NUMBER[saved['mode']]}: {what}" if saved["mode"] in RUN_NUMBER else what
+    try:
+        when = datetime.strptime(saved["recorded_at"], "%Y-%m-%d %H:%M UTC")
+        stamp = f"{when.day} {when:%b, %H:%M} UTC"
+    except (KeyError, ValueError):
+        stamp = "date unknown"
+    return f"{head} ({stamp})" + ("" if event_times(saved) else " [no timing]")
 
 
 def money(value) -> str:
@@ -460,8 +503,13 @@ def result_html(run: dict) -> str:
 def render(run: dict) -> str:
     parts = ['<div class="ms">']
     parts.append(f'<div class="banner">{e(run["banner"])}</div>')
-    if run["replay_of"]:
+    if run["replay_speed"] and not run["done"]:
+        parts.append(f'<div class="banner">Replaying a recorded run at {e(run["replay_speed"])}. '
+                     f'Recorded {e(run["replay_of"])}.</div>')
+    elif run["replay_of"]:
         parts.append(f'<div class="banner">Recorded run, {e(run["replay_of"])}. Nothing is running now.</div>')
+    if run["replay_note"]:
+        parts.append(f'<div class="banner">{e(run["replay_note"])}</div>')
     if run["caption"]:
         parts.append(f'<p class="caption">{e(run["caption"])}</p>')
     parts.append(f'<div class="task">User request <code>{e(run["task"])}</code></div>')
