@@ -150,7 +150,7 @@ def chart_e3() -> None:
     configs = list(CONFIG_NAME)
     # label offsets (points) so the crowded top-right points do not overlap
     offsets = {"none": (0, 16, "center"), "pg2_0.5": (-16, -6, "right"), "pg2_0.0006": (12, 12, "left"),
-               "lg3": (12, 12, "left"), "mixshield_trusting": (0, 22, "center"), "mixshield_strict": (0, -36, "center")}
+               "lg3": (12, 12, "left"), "mixshield_trusting": (0, 22, "center"), "mixshield_strict": (-18, -5, "right")}
     fig, ax = plt.subplots(figsize=(13, 8))
     for config in configs:
         asr, ahit, an = e3a_asr_test(e3a[config])
@@ -159,18 +159,23 @@ def chart_e3() -> None:
                    edgecolor="black", linewidth=1.5, zorder=3)
         dx, dy, ha = offsets[config]
         ax.annotate(CONFIG_NAME[config], (util, asr), xytext=(dx, dy), textcoords="offset points", ha=ha, fontsize=15,
-                    fontweight="bold" if config.startswith("mixshield") else "normal")
+                    fontweight="bold" if config.startswith("mixshield") else "normal",
+                    bbox={"fc": "white", "ec": "none", "pad": 1.5, "alpha": 0.85}, zorder=5)
         note("e3_security_vs_utility", CONFIG_NAME[config], "utility, E3b test (x)", f"{util:.1f} ({uhit}/{un})")
         note("e3_security_vs_utility", CONFIG_NAME[config], "attack success, E3a test (y)", f"{asr:.1f} ({ahit}/{an})")
+    undefended = e3b_utility_test("none")[0]
+    ax.axvline(undefended, color=GREY, ls="--", lw=1, zorder=1)
+    ax.text(undefended - 0.6, 52, "undefended utility", rotation=90, ha="right", va="center", fontsize=13, color=GREY)
+    note("e3_security_vs_utility", "undefended utility line", "x", f"{undefended:.1f}")
     ax.scatter([100], [0], s=700, marker="*", color=GREEN, edgecolor="black", zorder=4)
-    ax.annotate("ideal corner\n(full utility, 0% attacks)", (100, 0), xytext=(-6, 80), textcoords="offset points",
-                ha="right", fontsize=14, color=GREEN, fontweight="bold",
-                arrowprops={"arrowstyle": "->", "color": GREEN, "lw": 2})
+    ax.annotate("ideal (not a result)", (100, 0), xytext=(34, 90), textcoords="offset points",
+                ha="center", fontsize=14, color=GREEN, fontweight="bold",
+                arrowprops={"arrowstyle": "->", "color": GREEN, "lw": 2}, zorder=4)
     ax.set_xlim(0, 105)
-    ax.set_ylim(-20, 112)
+    ax.set_ylim(-5, 105)
     ax.set_xlabel("Utility on real Muse Spark tasks, no attack (%)  [E3b, test split, 52 tasks]")
     ax.set_ylabel("Attack success, worst case (%)  [E3a, test split, 189 attacks]")
-    ax.set_title("Security vs utility: lower right is better", pad=14)
+    ax.set_title("Security vs utility: lower right is better", pad=24)
     ax.grid(alpha=0.25, zorder=0)
     ax.legend(handles=[plt.Line2D([], [], marker="o", ls="", ms=11, mfc="white", mec="black", label="circle = no or trusting approver"),
                        plt.Line2D([], [], marker="s", ls="", ms=11, mfc="white", mec="black", label="square = strict approver")],

@@ -30,6 +30,7 @@
 | e3_security_vs_utility | MixShield (trusting) | attack success, E3a test (y) | 0.0 (0/189) |
 | e3_security_vs_utility | MixShield (strict) | utility, E3b test (x) | 76.9 (40/52) |
 | e3_security_vs_utility | MixShield (strict) | attack success, E3a test (y) | 0.0 (0/189) |
+| e3_security_vs_utility | undefended utility line | x | 92.3 |
 | e4_ablation | Full MixShield (trusting) | attack success, test | 0.0 (0/189) |
 | e4_ablation | Full MixShield (strict) | attack success, test | 0.0 (0/189) |
 | e4_ablation | Minus screen (strict) | attack success, test | 0.0 (0/189) |
