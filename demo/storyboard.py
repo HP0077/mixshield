@@ -7,7 +7,9 @@ Two steps:
                                             (build 16 04: only those frames, then the PDF again)
 
 Each frame's caption is the row's on-screen text from docs/video_script.md, read from the file, so the storyboard
-always matches the script. Screenshots need Playwright (pip install playwright) and Microsoft Edge.
+always matches the script. Screenshots need Playwright (pip install -e ".[video]") and Microsoft Edge. The video's own
+cards are in results/video/clean/ (demo/video_cards.py); frames 08 and 15 use them, the others use earlier 1080p
+renders of the same cards.
 """
 
 import json
@@ -41,23 +43,23 @@ RUNS = {"direct": "direct_20261031_113406.json", "simulated": "simulated_2026103
 # One entry per script row, in order: (file name, source, corner tag). Source is a card or chart path, or a shot name.
 FRAMES = [
     ("01_0000_hook_email", "results/video/hook_email.png", ""),
-    ("02_0007_run1_money_sent", "shot:run1_result", "Recorded run"),
+    ("02_0008_run1_money_sent", "shot:run1_result", "Recorded run"),
     ("03_0014_run2_blocked", "shot:run2_result", "Recorded run"),
     ("04_0018_hook_numbers", "results/video/hook_numbers.png", ""),
     ("05_0030_run1_playground", "shot:run1_top", "Recorded run"),
-    ("06_0037_run2_screen_card", "shot:run2_steps", "Recorded run"),
+    ("06_0039_run2_screen_card", "shot:run2_steps", "Recorded run"),
     ("07_0055_run3_paid", "shot:run3_result", "Recorded run"),
-    ("08_0102_inspector_config", "shot:inspector_diff", "Config files, side by side"),
+    ("08_0102_inspector_config", "results/video/clean/config_compare.png", "Config files, side by side"),
     ("09_0115_how_it_works", "results/video/how_it_works.png", ""),
     ("10_0128_meta_models", "results/video/meta_models.png", ""),
-    ("11_0137_meta_models_llama", "results/video/meta_models.png", ""),
-    ("12_0145_e2_language_gap", "results/charts/e2_language_gap.png", ""),
-    ("13_0205_e3_security_vs_utility", "results/charts/e3_security_vs_utility.png", ""),
-    ("14_0222_e4_ablation", "results/charts/e4_ablation.png", ""),
-    ("15_0230_limitations", "shot:limitations", "README text"),
-    ("16_0235_use_it", "results/video/use_it.png", ""),
-    ("17_0245_playground", "shot:playground_top", "Demo screenshot"),
-    ("18_0253_end_card", "results/video/end_card.png", ""),
+    ("11_0135_meta_models_llama", "results/video/meta_models.png", ""),
+    ("12_0142_e2_language_gap", "results/charts/e2_language_gap.png", ""),
+    ("13_0157_e3_security_vs_utility", "results/charts/e3_security_vs_utility.png", ""),
+    ("14_0214_e4_ablation", "results/charts/e4_ablation.png", ""),
+    ("15_0224_limitations", "results/video/clean/limitations.png", ""),
+    ("16_0232_use_it", "results/video/use_it.png", ""),
+    ("17_0242_space_live", "shot:space_live", "Mock-up: record the live Space"),
+    ("18_0249_end_card", "results/video/end_card.png", ""),
 ]
 
 
@@ -129,62 +131,22 @@ def shots():
         scroll_to(page, ".ms .result")
         page.screenshot(path=SHOTS / "run3_result.png")
         browser.close()
-    inspector_diff()
-    limitations()
     print("Wrote", ", ".join(sorted(f.name for f in SHOTS.glob("*.png"))))
 
 
-def inspector_diff():
-    """demo/inspector/direct.json and mixshield.json side by side, changed lines marked. The args list is split one item
-    per line so it fits; the values are the files' own."""
-    left = json.loads((ROOT / "demo" / "inspector" / "direct.json").read_text(encoding="utf-8"))["mcpServers"]["invoices"]
-    right = json.loads((ROOT / "demo" / "inspector" / "mixshield.json").read_text(encoding="utf-8"))["mcpServers"]["invoices"]
-
-    def lines(server):
-        out = [('"command": ' + json.dumps(server["command"]) + ",", True), ('"args": [', True)]
-        out += [("    " + json.dumps(a) + ",", True) for a in server["args"]]
-        out.append(("],", True))
-        if "connectionTimeout" in server:
-            out.append(('"connectionTimeout": ' + str(server["connectionTimeout"]), True))
-        return out
-
+def space_mockup():
+    """Storyboard stand-in for the live Space recording: the local playground screenshot under a browser address bar
+    that shows the Space's address. The real shot is a screen recording of the live page."""
+    shot = Image.open(SHOTS / "playground_top.png").convert("RGB")
+    bar = 76
     img = Image.new("RGB", (W, H), "white")
     d = ImageDraw.Draw(img)
-    d.text((80, 70), "One config change in MCP Inspector", font=font(56, bold=True), fill=TEXT)
-    for i, (title, server, bg) in enumerate((("demo/inspector/direct.json (before)", left, RED_BG),
-                                             ("demo/inspector/mixshield.json (after)", right, GREEN_BG))):
-        x = 80 + i * 900
-        d.text((x, 190), title, font=font(30), fill=MUTED)
-        d.rounded_rectangle((x, 240, x + 860, 1000), radius=12, fill=SURFACE, outline=LINE, width=2)
-        y = 270
-        for text, changed in lines(server):
-            if changed:
-                d.rectangle((x + 2, y - 4, x + 858, y + 38), fill=bg)
-            d.text((x + 30, y), text, font=font(28, mono=True), fill=TEXT)
-            y += 46
-    img.save(SHOTS / "inspector_diff.png")
-
-
-def limitations():
-    """The first two bullets of the README's "Limitations" section, as written there."""
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    section = readme.split("## Limitations", 1)[1].split("\n## ", 1)[0]
-    bullets = [b.strip()[2:] for b in section.strip().splitlines() if b.startswith("- ")][:2]
-    img = Image.new("RGB", (W, H), "white")
-    d = ImageDraw.Draw(img)
-    d.text((160, 120), "Limitations", font=font(72, bold=True), fill=TEXT)
-    y = 280
-    for b in bullets:
-        head, _, rest = b.partition("** ")
-        head = head.replace("**", "")
-        d.text((160, y), head, font=font(40, bold=True), fill=TEXT)
-        y += 64
-        for line in wrap(d, rest.replace("**", ""), font(34), 1600):
-            d.text((160, y), line, font=font(34), fill=MUTED)
-            y += 50
-        y += 50
-    d.text((160, 960), "From README.md, section \"Limitations\"", font=font(26), fill=MUTED)
-    img.save(SHOTS / "limitations.png")
+    d.rectangle((0, 0, W, bar), fill="#e3e7ee")
+    d.line((0, bar, W, bar), fill="#c9ced8", width=2)
+    d.rounded_rectangle((150, 14, 1400, bar - 14), radius=24, fill="white", outline="#aab1bf", width=2)
+    d.text((190, 22), "huggingface.co/spaces/HP0077/mixshield", font=font(28), fill=TEXT)
+    img.paste(shot.crop((0, 0, W, H - bar)), (0, bar))
+    img.save(SHOTS / "space_live.png")
 
 
 # ---------- frames and PDF ----------
@@ -234,6 +196,10 @@ def build(only=()):
     if len(rows) != len(FRAMES):
         sys.exit(f"The script has {len(rows)} timed rows but FRAMES has {len(FRAMES)}: update FRAMES first.")
     OUT.mkdir(parents=True, exist_ok=True)
+    space_mockup()
+    for old in OUT.glob("*.png"):  # frames from an earlier timing
+        if old.stem not in {name for name, _, _ in FRAMES}:
+            old.unlink()
     built = 0
     for (name, source, tag), (time, caption) in zip(FRAMES, rows):
         if only and not name.startswith(tuple(only)):
