@@ -12,6 +12,7 @@ DEMO_SAVE_RUNS=1 saves each run under results/demo/runs/ for the "Replay a recor
 """
 
 import json
+import os
 import queue
 import threading
 import time
@@ -71,11 +72,19 @@ def gate_result(iban: str, amount: float | None, reference: str, user_task: str,
     return viewer.gate_html(decision.action, decision.reason, f"transfer_money(iban={iban}, amount={amount})")
 
 
+def live_keys_missing() -> bool:
+    """True when the buttons that call a model cannot work here (see viewer.keys_missing). Read at click time."""
+    return viewer.keys_missing(os.environ, SCREEN.prompt_guard is not None)
+
+
 def analyse(text, iban, amount, reference, user_task, request: gr.Request):
     """A generator: the screen runs in a thread, and the "Live model calls" panel is drawn again after each call
     starts or ends; then the verdict cards and the gate."""
     if not text or not text.strip():
         yield "", viewer.check_note("Paste a message first."), False, ""
+        return
+    if live_keys_missing():
+        yield "", viewer.check_note(viewer.NEEDS_KEYS), False, ""
         return
     allowed, message = LIMITER.check(visitor_id(request), "check")
     if not allowed:
@@ -137,6 +146,9 @@ def buttons(mode: str | None, busy: bool = False) -> list:
 
 def start_run(mode: str, request: gr.Request):
     protected, banner, caption, task, kind = MODES[mode]
+    if mode != "direct" and live_keys_missing():  # run 1 needs no key; a refused click does not use up the rate limit
+        yield [viewer.message_html(viewer.NEEDS_KEYS)] + buttons(None)
+        return
     allowed, message = LIMITER.check(visitor_id(request), kind)
     if not allowed:
         yield [viewer.message_html(message)] + buttons(None)

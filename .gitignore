@@ -233,3 +233,6 @@ video_input/
 results/video/mixshield_demo.mp4
 results/video/mixshield_final.mp4
 results/video/mixshield_final.srt
+results/video/*.mp4
+results/video/*.srt
+video_input/**/*.mp4

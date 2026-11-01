@@ -322,7 +322,7 @@ def use_it():
     box(ax, 160, 378, 1600, 110, face=SURFACE, edge=LINE)
     text(ax, 200, 448, 'pip install -e ".[proxy,guards]"', 40, mono=True)
 
-    text(ax, 160, 590, "2.  Put the proxy in front of any MCP server", 34, MUTED)
+    text(ax, 160, 590, "2.  Put the proxy in front of an MCP server (stdio)", 34, MUTED)
     box(ax, 160, 618, 1600, 110, face=SURFACE, edge=LINE)
     text(ax, 200, 684, 'mixshield proxy --upstream "<command that starts the MCP server>" --config policy.json', 30,
          mono=True)
@@ -344,6 +344,50 @@ def end_card():
     text(ax, 164, 800, "Built with Llama", 36, bold=True)
     text(ax, 1760, 800, "Huzaifa Pathan", 30, MUTED, ha="right")
     save(fig, "end_card.png")
+
+
+# README.md, "Built during the hackathon / Used as-is" (and its first lines for the attack-set size and the Space).
+USED_AS_IS = [("AgentDojo", "Benchmark suites, tasks and scorer"),
+              ("MCP", "Python SDK and MCP Inspector"),
+              ("Muse Spark, Muse Spark Open", "Meta models: agent, translation, the screen's classifier"),
+              ("Llama Prompt Guard 2, Llama Guard 3", "Baselines (Prompt Guard 2 is also part of the screen)")]
+USED_LIBRARIES = "Plus open-source libraries: LangGraph, Gradio, Transformers, PyTorch and others."
+BUILT = [("The attack set", "300 attacks in English, Hinglish and Hindi, 450 benign texts, 30 adaptive texts"),
+         ("MixShield guard", "Screen + gate, with normalisation and approval rules"),
+         ("MCP proxy", "mixshield proxy: one command in front of any MCP server"),
+         ("AgentDojo integration and results", "Adapters, runner, defences, gate replay, sanity checks"),
+         ("Playground", "Gradio, live on Hugging Face Spaces")]
+
+
+def built_card(show_built: bool, name: str):
+    """What existed before the hackathon (left) and what was built during it (right). The "a" version leaves the right
+    column empty, so the video can crossfade from a to b; the layout is the same."""
+    fig, ax = canvas()
+    accent_bar(ax)
+    text(ax, 160, 260, "What existed, and what I built this week", 64, bold=True)
+    columns = [(160, "Already existed (used as-is)", MUTED, USED_AS_IS, USED_LIBRARIES)]
+    if show_built:
+        columns.append((990, "Built this week", ACCENT, BUILT, ""))
+    for x, heading, colour, items, foot in columns:
+        text(ax, x, 350, heading, 38, colour, bold=True)
+        y = 415
+        for title, detail in items:
+            text(ax, x, y, title, 32, bold=True)
+            for line in wrap_lines(ax, detail, 25, 740):
+                y += 36
+                text(ax, x, y, line, 25, MUTED)
+            y += 54
+        if foot:
+            for line in wrap_lines(ax, foot, 25, 740):
+                text(ax, x, y, line, 25, MUTED)
+                y += 36
+    ax.plot([930, 930], [320, 850], color=LINE, linewidth=1.5)
+    save(fig, name)
+
+
+def built_cards():
+    built_card(False, "built_card_a.png")
+    built_card(True, "built_card_b.png")
 
 
 def charts():
@@ -408,7 +452,7 @@ def labels():
 
 
 CARDS = {f.__name__: f for f in (title_card, hook_email, hook_numbers, config_compare, how_it_works, meta_models,
-                                   limitations, use_it, end_card)}
+                                   limitations, use_it, end_card, built_cards)}
 
 if __name__ == "__main__":
     # all | cards | charts | labels | one or more card names (e.g. meta_models end_card): only those are drawn again

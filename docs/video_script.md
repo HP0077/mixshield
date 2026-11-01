@@ -6,6 +6,8 @@ Name and title are on-screen text only. Voiceover reads the "Voiceover" column w
 
 ## Final version
 
+**The final video is my own edit:** `mixshield_meta.mp4` (2:16), made in Shotcut. The subtitles were burned in by `demo/add_subtitles.py` from the voiceover below (`results/video/mixshield_meta.mp4`, with its `.srt`). Video files are not committed: `*.mp4` in `video_input/` and `results/video/` is git-ignored.
+
 Ten rows, in order. The video is edited by hand (Shotcut / Clipchamp); each row lasts as long as its voiceover. The voiceover is read word for word; each `<br>` is a new sentence (one line in docs/practice_script.pdf). Row 4 is the "blocked" text because the live run 2 take (docs/demo_log.md, row 41) was blocked; if a new take needs OK, row 4 changes to: "This time, it actually misses it. But that's why there's a second check. The gate sees a brand-new account and stops to ask first. No money goes out." Row 6 matches the recorded checks (docs/demo_log.md, "Try to fool MixShield", attack-set texts): the attack was flagged, the normal message was not. Labels go on top of the clips as overlays from results/video/labels/ (rebuild: `python -X utf8 -m demo.video_cards labels`). Subtitles: `python -X utf8 -m demo.add_subtitles <exported video>` uses these exact words, with numbers as digits (84%, under 70, 99.5%, 0 false alarms, 2 of 27).
 
 | Row | Visual | Label | Voiceover (exact words) |

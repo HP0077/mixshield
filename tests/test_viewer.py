@@ -168,3 +168,20 @@ def test_run_labels_come_from_the_runs_own_result():
     assert labels["missed"].startswith("Run 2: screen missed, needs your OK (31 Oct, 09:27 UTC)")
     assert labels["flagged"].startswith("Run 2: flagged, blocked")
     assert all(label.endswith("[no timing]") for label in labels.values())  # these events carry no times
+
+
+def test_keys_missing():
+    ok = {"BASETEN_API_KEY": "k", "HF_TOKEN": "t"}
+    assert not viewer.keys_missing(ok, True)
+    assert not viewer.keys_missing({"BASETEN_API_KEY": "k"}, True)  # Prompt Guard 2 already loaded: no token needed
+    assert viewer.keys_missing({"BASETEN_API_KEY": "k"}, False)  # not loaded and no token to load it with
+    assert not viewer.keys_missing(ok, False)
+    assert viewer.keys_missing({"HF_TOKEN": "t"}, True)  # no Baseten key
+    assert viewer.keys_missing({"BASETEN_API_KEY": "  ", "HF_TOKEN": "t"}, True)
+    assert viewer.keys_missing({}, False)
+
+
+def test_needs_keys_message_names_what_to_do():
+    for part in ("BASETEN_API_KEY", "HF_TOKEN", "README Quickstart", "huggingface.co/spaces/HP0077/mixshield",
+                 "Run 1 and recorded replays work without keys"):
+        assert part in viewer.NEEDS_KEYS

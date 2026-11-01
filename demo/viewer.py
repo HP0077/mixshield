@@ -575,6 +575,19 @@ def calls_html(calls: list[dict], no_log: bool = False) -> str:
     return f'<details class="ms-calls" open><summary>Live model calls ({len(calls)})</summary>{body}</details>'
 
 
+NEEDS_KEYS = ("This live run needs BASETEN_API_KEY (and HF_TOKEN with access to Llama Prompt Guard 2). See README "
+              "Quickstart, or try the hosted Space: huggingface.co/spaces/HP0077/mixshield. Run 1 and recorded replays "
+              "work without keys.")
+
+
+def keys_missing(environ, prompt_guard_loaded: bool) -> bool:
+    """True when a live run cannot work: no BASETEN_API_KEY (Muse Spark Open), or Prompt Guard 2 is not loaded and there is
+    no HF_TOKEN to load it with. Prompt Guard 2 that is already loaded needs no token."""
+    if not (environ.get("BASETEN_API_KEY") or "").strip():
+        return True
+    return not prompt_guard_loaded and not (environ.get("HF_TOKEN") or "").strip()
+
+
 def message_html(text: str) -> str:
     """A plain notice in the same style (rate limit refusals, errors before a run starts)."""
     return f'<div class="ms"><div class="banner">{e(text)}</div></div>'

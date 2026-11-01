@@ -2,6 +2,8 @@
 
 **Hidden instructions written in Hinglish or Hindi slip past today's guards. MixShield catches them before a tool-using AI agent acts on them.**
 
+Try it now, no setup: https://huggingface.co/spaces/HP0077/mixshield
+
 ![Test split: Llama Guard 3 1B catches 84.3% of attacks in English but 68.6% in Hinglish (McNemar p < 0.001). The MixShield screen catches 99.5% in Hinglish (mean of 3 runs) with 0.0% false alarms on benign Hinglish texts.](results/video/hook_numbers.png)
 
 AI agents read chats, messages, support tickets, emails, documents and web pages. Anyone who can write into that text can hide an instruction in it that makes the agent send money or data (indirect prompt injection), and the attacker chooses the language. MixShield is a benchmark (300 attacks and 450 benign texts in English, Hinglish and Hindi) and an open-source guard (a Python library and an MCP proxy).
@@ -46,8 +48,9 @@ Then:
 1. **Run the tests** (no keys needed): `pytest -q`
 2. **Add your keys** to `.env` (the file explains each one). Never commit `.env`.
 3. **Accept the Llama Prompt Guard 2 licence** once, on Hugging Face, with the account that owns your `HF_TOKEN`:
-   [meta-llama/Llama-Prompt-Guard-2-86M](https://huggingface.co/meta-llama/Llama-Prompt-Guard-2-86M). Without it the
-   screen fails closed (every text counts as flagged).
+   [meta-llama/Llama-Prompt-Guard-2-86M](https://huggingface.co/meta-llama/Llama-Prompt-Guard-2-86M). It is a gated
+   model: Meta must approve your request, and that can take some time, so ask early. Without access the screen fails
+   closed (every text counts as flagged).
 4. **Start the playground:** `python -X utf8 -m demo.playground`, then open http://127.0.0.1:7860.
 
 | Part | Needs |
@@ -63,7 +66,7 @@ Then:
 The hosted [Hugging Face Space](https://huggingface.co/spaces/HP0077/mixshield) is optional: it runs the same
 playground, so you can try it without installing anything.
 
-**MCP proxy.** Put the proxy in front of any MCP server. Your MCP client starts the proxy instead of the server:
+**MCP proxy.** Put the proxy in front of an MCP server (stdio). Your MCP client starts the proxy instead of the server:
 
 ```
 mixshield proxy --upstream "<command that starts the MCP server>" --config policy.json --user-task "Pay invoice INV-102"
