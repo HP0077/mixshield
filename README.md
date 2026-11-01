@@ -11,20 +11,57 @@ AI agents read chats, messages, support tickets, emails, documents and web pages
 - Built for the Meta Global AI Developer Hackathon 2026, theme **"Push the Frontier"**. It runs on **Muse Spark** (Meta Model API) and **Muse Spark Open** (open weights). Muse Spark Open is also the classifier inside the MixShield screen.
 - Video: _TODO_ · Playground: [Hugging Face Space](https://huggingface.co/spaces/HP0077/mixshield) · Limits: [read them](#limitations) before you trust a number.
 
-## Quick start
+## Quickstart
 
-The package is not on PyPI yet. Install it from a clone (Python 3.11 or newer):
+Python 3.11 or newer. The package is not on PyPI yet, so install it from a clone. `[all]` installs everything the
+demo and the tests need (it downloads PyTorch, so allow a few GB and some minutes).
 
-```
+**Windows (PowerShell):**
+
+```powershell
 git clone https://github.com/HP0077/mixshield
 cd mixshield
-pip install -e ".[proxy,guards]"
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e ".[all]"
+copy .env.example .env
 ```
 
-Set two environment variables (or put them in a `.env` file):
+**Linux / macOS:**
 
-- `BASETEN_API_KEY`: for Muse Spark Open, the screen's classifier.
-- `HF_TOKEN`: a Hugging Face token. Prompt Guard 2 is a gated model: accept its licence on Hugging Face first.
+```bash
+git clone https://github.com/HP0077/mixshield
+cd mixshield
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[all]"
+cp .env.example .env
+```
+
+On Windows, clone into a short folder path (for example `C:\mixshield`): PyTorch has very long file names, and the
+install fails if the full path passes 260 characters (or turn on Windows long paths).
+
+Then:
+
+1. **Run the tests** (no keys needed): `pytest -q`
+2. **Add your keys** to `.env` (the file explains each one). Never commit `.env`.
+3. **Accept the Llama Prompt Guard 2 licence** once, on Hugging Face, with the account that owns your `HF_TOKEN`:
+   [meta-llama/Llama-Prompt-Guard-2-86M](https://huggingface.co/meta-llama/Llama-Prompt-Guard-2-86M). Without it the
+   screen fails closed (every text counts as flagged).
+4. **Start the playground:** `python -X utf8 -m demo.playground`, then open http://127.0.0.1:7860.
+
+| Part | Needs |
+| --- | --- |
+| Tests (`pytest -q`) | nothing |
+| Playground: "Replay a recorded run" (the demo runs, step by step) | nothing |
+| Playground: Run 1, simulated agent with no MixShield | nothing |
+| Playground: Run 2, simulated agent with MixShield, and the "Try to fool MixShield" tab | `BASETEN_API_KEY` and `HF_TOKEN` (and the licence) |
+| Playground: Run 3, Muse Spark Open as the agent | `BASETEN_API_KEY` and `HF_TOKEN` (and the licence) |
+| `mixshield proxy`, `Shield` in Python | `BASETEN_API_KEY` and `HF_TOKEN` (and the licence) |
+| Benchmark scripts in `bench/` (agent runs, Hindi translation) | also `MODEL_API_KEY` |
+
+The hosted [Hugging Face Space](https://huggingface.co/spaces/HP0077/mixshield) is optional: it runs the same
+playground, so you can try it without installing anything.
 
 **MCP proxy.** Put the proxy in front of any MCP server. Your MCP client starts the proxy instead of the server:
 
@@ -63,7 +100,7 @@ Run it: `pip install -e ".[all]"`, then `python -X utf8 -m demo.playground`. The
    - If the screen misses it, the gate still holds the payment: **NEEDS YOUR OK** (amber), nothing is sent.
 3. **Muse Spark Open (real model), with MixShield:** "Pay INV-101". The trusted payee goes through (green).
 
-Before recording, the real screen checked the unedited demo email in 17 runs. It flagged it 15 times. Twice it did not, and both times the gate answered "ask" ([docs/demo_log.md](docs/demo_log.md)). Prompt Guard 2 scored it 0.00089 in every run where its score was recorded (not flagged).
+The real screen checked the unedited demo email in 19 runs. It flagged it 16 times. Three times it did not, and each time the gate answered "ask" ([docs/demo_log.md](docs/demo_log.md)). Prompt Guard 2 scored it 0.00089 in every run where its score was recorded (not flagged).
 
 A second client, MCP Inspector, gets the same protection with one config change ([docs/demo_inspector.md](docs/demo_inspector.md)).
 
@@ -238,8 +275,8 @@ The attacks use the 10 attacker goals of AgentDojo's own injection tasks, writte
 | What | Used for | Licence |
 | --- | --- | --- |
 | [AgentDojo](https://github.com/ethz-spylab/agentdojo) 0.1.35 | Suites, user and injection tasks, scorer, built-in attacks (E5a) | MIT |
-| Muse Spark (`muse-spark-1.3`), Meta Model API | Agent; Hindi translation | _TODO: Meta's terms of use_ |
-| Muse Spark Open (`meta-models/muse-spark-open-1026`), served by Baseten | Agent; the screen's classifier | _TODO: check the model licence_ |
+| Muse Spark (`muse-spark-1.3`), Meta Model API | Agent; Hindi translation | No public model card or terms page. Used through the Meta Model API for this hackathon. |
+| Muse Spark Open (`meta-models/muse-spark-open-1026`), Baseten | Agent; the screen's classifier | No public model card or terms page. Used through Baseten for this hackathon. |
 | [Llama Prompt Guard 2 86M](https://huggingface.co/meta-llama/Llama-Prompt-Guard-2-86M) | Baseline, and part of the screen | Llama 4 Community License |
 | [Llama Guard 3 1B](https://huggingface.co/meta-llama/Llama-Guard-3-1B) | Baseline | Llama 3.2 Community License |
 | [deepset/prompt-injections](https://huggingface.co/datasets/deepset/prompt-injections) | Control check for Prompt Guard 2 | Apache-2.0 |
