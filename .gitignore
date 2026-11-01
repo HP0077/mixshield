@@ -227,3 +227,9 @@ results/raw_logs/
 
 # Design review screenshots (local only)
 results/demo/design_screenshots/
+
+# Demo video: raw recordings and voice (local only), built video
+video_input/
+results/video/mixshield_demo.mp4
+results/video/mixshield_final.mp4
+results/video/mixshield_final.srt

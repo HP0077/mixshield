@@ -9,7 +9,11 @@ gets a 16:9 version (name_169.png) scaled down into the top 82% of a 3840x2160 f
 The 1080p cards directly in results/video/ are earlier renders (README image, storyboard frames); this script does
 not rewrite them.
 
-Run:  python -X utf8 -m demo.video_cards [cards|charts]      (default: both; charts need Playwright and Edge)
+Each card is also saved as a 1920x1080 copy in results/video/clean_1080/. `labels` writes the clip label overlays for
+the script's "Final version" (results/video/labels/).
+
+Run:  python -X utf8 -m demo.video_cards [cards|charts|labels|<card name> ...]
+      (default: cards and charts; charts need Playwright and Edge; card names draw only those cards)
 """
 
 import json
@@ -28,6 +32,8 @@ from PIL import Image  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "results" / "video" / "clean"
+OUT_1080 = ROOT / "results" / "video" / "clean_1080"  # 1920x1080 copies, written with each card
+LABELS = ROOT / "results" / "video" / "labels"
 W, H = 1920, 1080
 SCALE = 2  # output pixels per grid unit: 3840x2160
 EMPTY_FROM = math.ceil(0.82 * H * SCALE)  # first pixel row of the empty subtitle band
@@ -126,6 +132,8 @@ def save(fig, name):
     fig.savefig(path, dpi=100 * SCALE, facecolor=BG)
     plt.close(fig)
     check_bottom(path)
+    OUT_1080.mkdir(parents=True, exist_ok=True)
+    Image.open(path).convert("RGB").resize((W, H), Image.LANCZOS).save(OUT_1080 / name)
 
 
 def title_card():
@@ -189,6 +197,7 @@ def hook_numbers():
     text(ax, 160, 830, "Hinglish, mean of 3 runs", 30, MUTED)
     text(ax, 800, 780, "0.0%", 120, bold=True)
     text(ax, 800, 830, "false alarms on benign Hinglish texts", 30, MUTED)
+    text(ax, 160, 874, "Not perfect: 2 of 27 adaptive attacks got through (default mode)", 26, MUTED)  # README, Limitations
     save(fig, "hook_numbers.png")
 
 
@@ -262,10 +271,11 @@ def meta_models():
     text(ax, 160, 260, "Meta models in MixShield", 64, bold=True)
     text(ax, 1760, 260, "Built with Llama", 36, ACCENT, bold=True, ha="right")
     rows = [
-        ("Muse Spark Open", "open weights", "The screen's code-mixing-aware classifier: flag + one-line reason", True,
-         "Caught 99.5% of Hinglish attacks (test split)"),
-        ("Muse Spark", "Meta Model API", "The agent in our tests, and the Hindi translator", False, ""),
-        ("Llama Prompt Guard 2  +  Llama Guard 3", "Hugging Face", "Measured baselines", False, ""),
+        ("Muse Spark Open", "open weights", "Checks every message the agent reads: flag + one-line reason", True,
+         "Also the real agent in run 3 · caught 99.5% of Hinglish attacks (test split)"),
+        ("Muse Spark", "Meta Model API", "Ran our agent tests, and translated the Hindi attacks", False, ""),
+        ("Llama Prompt Guard 2  +  Llama Guard 3", "Hugging Face",
+         "Prompt Guard 2 is the first check in the screen. Both are our measured baselines.", False, ""),
     ]
     y = 320
     for name, where, role, core, extra in rows:
@@ -325,11 +335,12 @@ def use_it():
 def end_card():
     fig, ax = canvas()
     accent_bar(ax)
-    text(ax, 160, 330, "MixShield", 130, bold=True)
-    text(ax, 164, 450, "Code", 30, MUTED)
-    text(ax, 164, 510, "github.com/HP0077/mixshield", 48, ACCENT)
-    text(ax, 164, 610, "Playground", 30, MUTED)
-    text(ax, 164, 670, "huggingface.co/spaces/HP0077/mixshield", 48, ACCENT)
+    text(ax, 160, 300, "MixShield", 130, bold=True)
+    text(ax, 162, 410, "AI safety shouldn't stop at English.", 64, bold=True)
+    text(ax, 164, 500, "Code", 30, MUTED)
+    text(ax, 164, 555, "github.com/HP0077/mixshield", 48, ACCENT)
+    text(ax, 164, 635, "Playground", 30, MUTED)
+    text(ax, 164, 690, "huggingface.co/spaces/HP0077/mixshield", 48, ACCENT)
     text(ax, 164, 800, "Built with Llama", 36, bold=True)
     text(ax, 1760, 800, "Huzaifa Pathan", 30, MUTED, ha="right")
     save(fig, "end_card.png")
@@ -373,12 +384,47 @@ def chart_169(name):
     check_bottom(path)
 
 
+def labels():
+    """One transparent 1920x1080 PNG per labelled row of the script's "Final version" table, with only the label in
+    the top-left corner (bold 30 px white on a #111827 rounded box), to lay over the clips in a video editor. The
+    text is read from the script, so it always matches it. Named <row>_<clip or card>_label.png."""
+    from PIL import ImageDraw, ImageFont
+
+    from demo.practice_script import final_rows
+    f = ImageFont.truetype(str(FONT_FILES[1]), 30)
+    pad_x, pad_y = 16, 12
+    LABELS.mkdir(parents=True, exist_ok=True)
+    for row in final_rows():
+        if not row["label"]:
+            continue
+        name = re.search(r"([\w]+)\.(?:mp4|png)", row["visual"]).group(1)
+        left, top, right, bottom = f.getbbox(row["label"])
+        img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        d.rounded_rectangle((32, 28, 32 + right + 2 * pad_x, 28 + bottom - top + 2 * pad_y), radius=12, fill="#111827")
+        d.text((32 + pad_x, 28 + pad_y - top), row["label"], font=f, fill="white")
+        img.save(LABELS / f"{row['n']:02d}_{name}_label.png")
+    print("Wrote", ", ".join(sorted(p.name for p in LABELS.glob("*.png"))), "to", LABELS)
+
+
+CARDS = {f.__name__: f for f in (title_card, hook_email, hook_numbers, config_compare, how_it_works, meta_models,
+                                   limitations, use_it, end_card)}
+
 if __name__ == "__main__":
-    what = sys.argv[1] if len(sys.argv) > 1 else "all"
-    if what in ("all", "cards"):
-        for make in (title_card, hook_email, hook_numbers, config_compare, how_it_works, meta_models, limitations,
-                     use_it, end_card):
+    # all | cards | charts | labels | one or more card names (e.g. meta_models end_card): only those are drawn again
+    what = sys.argv[1:] or ["all"]
+    if what[0] in ("all", "cards"):
+        for make in CARDS.values():
             make()
-    if what in ("all", "charts"):
+    if what[0] in ("all", "charts"):
         charts()
-    print("Wrote", ", ".join(sorted(p.name for p in OUT.glob("*.png"))), "to", OUT)
+    if what[0] == "labels":
+        labels()
+    elif what[0] not in ("all", "cards", "charts"):
+        unknown = [w for w in what if w not in CARDS]
+        if unknown:
+            sys.exit(f"Unknown card(s): {unknown}. Cards: {', '.join(CARDS)}")
+        for w in what:
+            CARDS[w]()
+    if what[0] != "labels":
+        print("Wrote", ", ".join(sorted(p.name for p in OUT.glob("*.png"))), "to", OUT)

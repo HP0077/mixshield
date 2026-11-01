@@ -24,7 +24,7 @@ from pathlib import Path
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-from demo import viewer
+from demo import model_calls, viewer
 from demo.obedient_client import TASK, obey
 from mixshield.proxy import Proxy, load_config
 
@@ -131,7 +131,7 @@ async def real_agent(emit, screen=None, task: str = REAL_TASK) -> None:
 
     from demo.agent import BASE_URL, SYSTEM, build_graph, drive  # imports langgraph, loads .env
 
-    client = openai.AsyncOpenAI(api_key=os.environ["BASETEN_API_KEY"], base_url=BASE_URL)
+    client = model_calls.TimedClient(openai.AsyncOpenAI(api_key=os.environ["BASETEN_API_KEY"], base_url=BASE_URL))
     usage = {"input": 0, "output": 0}
     async with stdio_client(server_params(), errlog=sys.stderr) as (read, write):
         async with ClientSession(read, write) as session:
@@ -158,7 +158,11 @@ def stream_run(factory, run: dict):
     def emit(kind, data=None):
         events.put((kind, data, round(time.monotonic() - start, 3)))
 
+    def call(data):  # a model call of this run (demo/model_calls.py), with the time it started
+        emit("model_call", {**data, "t": round(time.monotonic() - start, 1)})
+
     def work():
+        model_calls.SINK.set(call)  # this thread's context; asyncio.run and to_thread pass it on
         try:
             asyncio.run(asyncio.wait_for(factory(emit), TIMEOUT))
         except BaseException as exc:  # shown to the visitor, never hidden

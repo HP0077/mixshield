@@ -12,12 +12,14 @@ DEMO_SAVE_RUNS=1 saves each run under results/demo/runs/ for the "Replay a recor
 """
 
 import json
+import queue
+import threading
 import time
 from pathlib import Path
 
 import gradio as gr
 
-from demo import results_strip, scenarios, viewer
+from demo import model_calls, results_strip, scenarios, viewer
 from demo.mcp_server import EMAILS
 from demo.obedient_client import TASK
 from demo.ratelimit import RateLimiter, visitor_id
@@ -48,6 +50,7 @@ try:
     SCREEN.prompt_guard = load_prompt_guard()
 except Exception as exc:  # the screen then fails closed on every text, and says so
     print(f"Prompt Guard 2 did not load ({type(exc).__name__}: {exc}); the screen will fail closed", flush=True)
+model_calls.install(SCREEN)  # reports each real model call to the "Live model calls" panel
 
 LIMITER = RateLimiter.from_env()
 
@@ -69,13 +72,34 @@ def gate_result(iban: str, amount: float | None, reference: str, user_task: str,
 
 
 def analyse(text, iban, amount, reference, user_task, request: gr.Request):
+    """A generator: the screen runs in a thread, and the "Live model calls" panel is drawn again after each call
+    starts or ends; then the verdict cards and the gate."""
     if not text or not text.strip():
-        return "", viewer.check_note("Paste a message first."), False
+        yield "", viewer.check_note("Paste a message first."), False, ""
+        return
     allowed, message = LIMITER.check(visitor_id(request), "check")
     if not allowed:
-        return "", viewer.check_note(message), False
-    cards, flagged = screen_result(text)
-    return cards, gate_result(iban, amount, reference, user_task, text, flagged), flagged
+        yield "", viewer.check_note(message), False, ""
+        return
+    calls, events, out, t0 = [], queue.Queue(), {}, time.monotonic()
+
+    def work():
+        model_calls.SINK.set(lambda data: events.put({**data, "t": round(time.monotonic() - t0, 1)}))
+        try:
+            out["verdict"] = screen_result(text)
+        finally:
+            events.put(None)
+
+    threading.Thread(target=work, daemon=True).start()
+    yield "", "", False, viewer.calls_html(calls)
+    while (data := events.get()) is not None:
+        viewer.merge_call(calls, data)
+        yield gr.update(), gr.update(), gr.update(), viewer.calls_html(calls)
+    if "verdict" not in out:
+        yield "", viewer.check_note("The check failed. Please try again."), False, viewer.calls_html(calls)
+        return
+    cards, flagged = out["verdict"]
+    yield cards, gate_result(iban, amount, reference, user_task, text, flagged), flagged, viewer.calls_html(calls)
 
 
 def recheck_gate(text, iban, amount, reference, user_task, flagged):
@@ -288,6 +312,7 @@ with gr.Blocks(title="MixShield", fill_width=True) as demo:
                 ex_normal = gr.Button("Example: normal Hinglish message")
             run = gr.Button("Check message", variant="primary")
             screen_out = gr.HTML()
+            calls_out = gr.HTML()
 
             gr.Markdown("### Action gate\nA proposed `transfer_money` call. The gate decides using the screen's "
                         "verdict on the message above.")
@@ -308,7 +333,7 @@ with gr.Blocks(title="MixShield", fill_width=True) as demo:
             ex_normal.click(lambda: load_example(NORMAL_HINGLISH, "ZZ00DEMO0000000001", 120.0, "INV-101",
                                                  "Pay invoice INV-101"),
                             outputs=call_fields)
-            run.click(analyse, inputs=call_fields, outputs=[screen_out, gate_out, flagged_state])
+            run.click(analyse, inputs=call_fields, outputs=[screen_out, gate_out, flagged_state, calls_out])
             gate_btn.click(recheck_gate, inputs=call_fields + [flagged_state], outputs=gate_out)
 
     # "Built with Llama" is required by the Llama 4 and Llama 3.2 Community Licenses for a service that uses Prompt Guard 2.

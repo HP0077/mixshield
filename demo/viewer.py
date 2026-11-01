@@ -17,6 +17,9 @@ Event kinds (`apply(run, kind, data)`):
   call       {"tool", "args"}                the payment call the agent proposed
   gate       {"action", "reason"}            allow | ask | block
   result     {"is_error", "text"}            what the tool call returned
+  model_call {"id", "t", "model", "sent", "back", "secs"}
+                                             one real model call (demo/model_calls.py), sent when it starts (back and
+                                             secs None) and again when it ends; "t" is seconds since the run started
   answer     str                             the agent's final text (real agent only)
   error      str                             the run failed
   done       {}
@@ -157,6 +160,16 @@ CSS = """
 .ms-check .pill.dark{color:var(--ms-text)}
 .ms-check .card.gate{margin-top:0}
 .ms-check .note{font-size:13px;color:var(--ms-muted)}
+
+.ms-calls{font-family:var(--ms-font);color:var(--ms-text);margin:16px 0 0;border:1px solid var(--ms-line);border-radius:8px;background:var(--ms-bg)}
+.ms-calls summary{cursor:pointer;padding:10px 16px;font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ms-muted)}
+.ms-calls table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:12.5px;line-height:1.45}
+.ms-calls th{text-align:left;font-weight:500;color:var(--ms-muted);padding:6px 12px;border-top:1px solid var(--ms-line)}
+.ms-calls td{padding:6px 12px;border-top:1px solid var(--ms-line);vertical-align:top;overflow-wrap:anywhere}
+.ms-calls col.t{width:64px}.ms-calls col.m{width:240px}.ms-calls col.s{width:28%}.ms-calls col.l{width:72px}
+.ms-calls td.mono{font-family:var(--ms-mono);font-size:12px;background:none;padding-top:7px}
+.ms-calls .wait{color:var(--ms-muted)}
+.ms-calls .empty{padding:0 16px 12px;font-size:13px;color:var(--ms-muted)}
 @media (max-width:760px){.ms-check .cols{grid-template-columns:1fr}}
 
 .ms-strip{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 24px;margin-top:16px;padding:8px 12px;border:1px solid var(--ms-line);
@@ -175,7 +188,8 @@ def new_run(mode: str, protected: bool, banner: str, task: str, caption: str = "
     tag until the agent really reads an email (then the email event takes over)."""
     return {"preview": preview, "t0": None, "took": None, "screen_t0": None, "screening_tool": "", "mode": mode, "protected": protected, "banner": banner, "caption": caption, "task": task,
             "replay_of": replay_of, "replay_speed": "", "replay_note": "", "email": None, "screening": False, "screens": [], "screen": None, "call": None,
-            "gate": None, "result": None, "answer": "", "error": "", "done": False, "events": [], "fresh": []}
+            "gate": None, "result": None, "answer": "", "error": "", "done": False, "events": [], "fresh": [],
+            "calls": []}
 
 
 def apply(run: dict, kind: str, data=None) -> dict:
@@ -204,6 +218,8 @@ def apply(run: dict, kind: str, data=None) -> dict:
         fresh = ["gate"]
     elif kind == "result":
         run["result"] = data
+    elif kind == "model_call":
+        merge_call(run["calls"], data)
     elif kind == "answer":
         run["answer"] = data
     elif kind == "error":
@@ -215,6 +231,15 @@ def apply(run: dict, kind: str, data=None) -> dict:
         fresh.append("result")
     run["fresh"] = fresh
     return run
+
+
+def merge_call(calls: list[dict], data: dict) -> None:
+    """Add a model call, or fill in the end of one already listed (same id); the time it started is kept."""
+    known = next((c for c in calls if c["id"] == data["id"]), None)
+    if known:
+        known.update({k: v for k, v in data.items() if k != "t"})
+    else:
+        calls.append(dict(data))
 
 
 def replay(saved: dict) -> dict:
@@ -516,6 +541,8 @@ def render(run: dict) -> str:
     parts.append(email_html(run))
     parts.append(flow_html(run))
     if run["protected"]:
+        parts.append(calls_html(run["calls"], no_log=bool(run["replay_of"]) and not run["calls"]))
+    if run["protected"]:
         parts.append(f'<p class="two">{e(TWO_LAYERS)}</p>')
     else:
         parts.append('<div style="height:24px"></div>')
@@ -525,6 +552,27 @@ def render(run: dict) -> str:
         parts.append(f'<div class="answer"><b>Agent\'s answer</b><br>{shown}</div>')
     parts.append("</div>")
     return "".join(parts)
+
+
+def calls_html(calls: list[dict], no_log: bool = False) -> str:
+    """The "Live model calls" panel: one row per real model call, as it was reported (demo/model_calls.py). Open by
+    default. A call still running shows "waiting"."""
+    if calls:
+        rows = []
+        for c in calls:
+            done = c.get("secs") is not None
+            back = e(c["back"]) if done else '<span class="wait">waiting&hellip;</span>'
+            secs = f'{c["secs"]:.2f} s' if done else ""
+            rows.append(f'<tr><td class="mono">+{c.get("t", 0):.1f} s</td><td>{e(c["model"])}</td>'
+                        f'<td>{e(c["sent"])}</td><td>{back}</td><td class="mono">{secs}</td></tr>')
+        body = ('<table><colgroup><col class="t"><col class="m"><col class="s"><col><col class="l"></colgroup>'
+                '<tr><th>Time</th><th>Model</th><th>Sent</th><th>Came back</th><th>Took</th></tr>'
+                + "".join(rows) + "</table>")
+    elif no_log:
+        body = '<div class="empty">This recorded run has no call log (it was saved before the panel existed).</div>'
+    else:
+        body = '<div class="empty">No model calls yet.</div>'
+    return f'<details class="ms-calls" open><summary>Live model calls ({len(calls)})</summary>{body}</details>'
 
 
 def message_html(text: str) -> str:
