@@ -13,9 +13,9 @@ from agentdojo.agent_pipeline.llms.openai_llm import (
 )
 from agentdojo.functions_runtime import EmptyEnv
 from agentdojo.models import MODEL_NAMES
-from dotenv import load_dotenv
+from mixshield.env import load_env
 
-load_dotenv()
+load_env()
 
 MODELS = {
     "muse-spark": {

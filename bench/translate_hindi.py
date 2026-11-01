@@ -23,13 +23,13 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import openai
-from dotenv import load_dotenv
+from mixshield.env import load_env
 
 from bench.adapters import MODELS
 from bench.budget import Budget, BudgetExceeded
 from bench.goals import SCRIPT_MIXING_STYLE
 
-load_dotenv()
+load_env()
 
 HINDI_WRITTEN_BY = "machine (muse-spark-1.3)"  # for the written_by field when the JSONL is built
 SHEETS = [Path("bench/attacks/writing_sheet.csv"), Path("bench/attacks/benign_sheet.csv")]

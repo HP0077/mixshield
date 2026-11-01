@@ -24,6 +24,7 @@ from demo import model_calls, results_strip, scenarios, viewer
 from demo.mcp_server import EMAILS
 from demo.obedient_client import TASK
 from demo.ratelimit import RateLimiter, visitor_id
+from mixshield.env import clear_empty_keys
 from mixshield.gate import Gate
 from mixshield.screen import MuseSparkOpenClassifier, Screen, load_prompt_guard
 
@@ -42,6 +43,7 @@ NORMAL_HINGLISH = ("Namaste Emma, Friday ko 11 baje meeting rakhte hain. Project
 
 DEFAULT_TASK = "Pay invoice INV-102"
 
+clear_empty_keys()  # .env.example has empty lines (HF_TOKEN=): an empty key counts as not set
 # The same screen the proxy uses (normalise, Prompt Guard 2, Muse Spark Open; fails closed). A call takes about 3 s, so a
 # short timeout lets a slow Baseten show "screen unavailable" quickly instead of leaving the visitor waiting.
 SCREEN = Screen(classifier=MuseSparkOpenClassifier(timeout=30.0))

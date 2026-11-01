@@ -18,14 +18,14 @@ import time
 from pathlib import Path
 
 import openai
-from dotenv import load_dotenv
+from mixshield.env import load_env
 
 from bench.adapters import MODELS
 from bench.budget import Budget, BudgetExceeded
 from bench.pilot import load_texts
 from mixshield.screen import SCREEN_PROMPT, parse_screen, ranking_score  # FROZEN prompt, moved there unchanged on 28 Oct
 
-load_dotenv()
+load_env()
 
 THRESHOLD = 0.5
 OUT_DIR = Path("results/e2")

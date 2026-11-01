@@ -46,7 +46,7 @@ install fails if the full path passes 260 characters (or turn on Windows long pa
 Then:
 
 1. **Run the tests** (no keys needed): `pytest -q`
-2. **Add your keys** to `.env` (the file explains each one). Never commit `.env`.
+2. **Add your keys** to `.env` (the file explains each one; a key you leave empty counts as not set). Never commit `.env`.
 3. **Accept the Llama Prompt Guard 2 licence** once, on Hugging Face, with the account that owns your `HF_TOKEN`:
    [meta-llama/Llama-Prompt-Guard-2-86M](https://huggingface.co/meta-llama/Llama-Prompt-Guard-2-86M). It is a gated
    model: Meta must approve your request, and that can take some time, so ask early. Without access the screen fails

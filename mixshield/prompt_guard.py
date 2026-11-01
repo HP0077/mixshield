@@ -3,10 +3,11 @@
 import os
 
 import torch
-from dotenv import load_dotenv
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-load_dotenv()  # HF_TOKEN and HF_HOME come from .env / the environment
+from mixshield.env import load_env
+
+load_env()  # HF_TOKEN and HF_HOME come from .env / the environment; an empty HF_TOKEN counts as not set
 
 MODEL_ID = "meta-llama/Llama-Prompt-Guard-2-86M"
 WINDOW = 512

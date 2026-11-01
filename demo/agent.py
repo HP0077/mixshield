@@ -22,7 +22,6 @@ import sys
 from pathlib import Path
 
 import openai
-from dotenv import load_dotenv
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
@@ -31,10 +30,11 @@ from mcp.client.stdio import stdio_client
 from typing_extensions import TypedDict
 
 from mixshield.approval import ApprovalRequest, approval_payload, parse_answer
+from mixshield.env import load_env
 from mixshield.proxy import Proxy, StubScreen, load_config
 from mixshield.screen import Screen
 
-load_dotenv()
+load_env()
 
 MODEL = "meta-models/muse-spark-open-1026"
 BASE_URL = "https://inference.baseten.co/v1"

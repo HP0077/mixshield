@@ -6,6 +6,8 @@ import os
 
 
 def main(argv: list[str] | None = None) -> None:
+    from mixshield.env import load_env
+    load_env()  # .env, with empty keys (HF_TOKEN= from .env.example) counted as not set
     parser = argparse.ArgumentParser(prog="mixshield")
     commands = parser.add_subparsers(dest="command", required=True)
     proxy = commands.add_parser("proxy", help="MCP proxy: gate every tool call, screen every tool output")
