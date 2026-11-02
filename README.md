@@ -25,7 +25,7 @@ AI agents read chats, messages, support tickets, emails, documents and web pages
 - **Detection (test split: 70 attacks and 105 benign texts per language):** Llama Prompt Guard 2 at its default threshold flagged **0 of 70** attacks in every language. Llama Guard 3 1B caught 84.3% in English but **68.6% in Hinglish**. The MixShield screen caught **98.6% / 99.5% / 100.0%** (English / Hinglish / Hindi) with **0.0% / 0.0% / 1.0%** false alarms.
 - **Agents:** Muse Spark and Muse Spark Open were never hijacked (E1: 0 of 536 scorable attacks). So we also tested a scripted worst-case agent (a simulation, not a real model). On the test split it was hijacked in 189 of 189 attacks with no defence and **0 of 189 with MixShield**. On real tasks with Muse Spark, MixShield kept **88.5%** utility (no defence: 92.3%).
 - Built for the Meta Global AI Developer Hackathon 2026, theme **"Push the Frontier"**. It runs on **Muse Spark** (Meta Model API) and **Muse Spark Open** (open weights). Muse Spark Open is also the classifier inside the MixShield screen.
-- Video: [Link](https://www.youtube.com/watch?v=uiouI_9ESK0)
+- Video: [Youtube Video Link](https://www.youtube.com/watch?v=uiouI_9ESK0)
 - Playground: [Hugging Face Space](https://huggingface.co/spaces/HP0077/mixshield) · Limits: [read them](#limitations) before you trust a number.
 
 ## Quickstart
