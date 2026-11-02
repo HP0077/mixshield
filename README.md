@@ -1,5 +1,17 @@
 # MixShield
 
+## Meta Global AI Hackathon 2026 — Submission Overview
+
+- **Track & problem statement:** Indie Developer · Push the Frontier
+- **Provenance:** Built 100% from scratch during the hackathon (Oct 26 – Nov 4, 2026). Repo created Oct 26.
+- **Meta runtime models:**
+  - `Muse Spark Open` (`meta-models/muse-spark-open-1026`, via Baseten): load-bearing open-weight stage, the code-mixing-aware classifier inside the MixShield screen on every tool output, and the tool-calling agent in run 3
+  - `Muse Spark` (`muse-spark-1.3`, Meta Model API): agent in the AgentDojo experiments, and Hindi translation for the benchmark
+  - `Llama Prompt Guard 2 86M`: local first check inside the screen, and a baseline; `Llama Guard 3 1B`: baseline
+- **Bonus categories targeted:** Best Build on Meta Open Weight Models · Best Agentic Use-Case
+- **Demo video:** <your YouTube link> · **Live demo (optional):** https://huggingface.co/spaces/HP0077/mixshield
+- **Quickstart & keyless replay:** `cp .env.example .env`, then `python -X utf8 -m demo.playground`. Run 1 and "Replay a recorded run" work without any keys.
+
 **Hidden instructions written in Hinglish or Hindi slip past today's guards. MixShield catches them before a tool-using AI agent acts on them.**
 
 Try it now, no setup: https://huggingface.co/spaces/HP0077/mixshield
