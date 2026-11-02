@@ -1,5 +1,4 @@
 # MixShield
-
 ## Meta Global AI Hackathon 2026 — Submission Overview
 
 - **Track & problem statement:** Indie Developer · Push the Frontier
