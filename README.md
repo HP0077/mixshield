@@ -10,7 +10,8 @@
 - **Bonus categories targeted:**
   - Best Build on Meta Open Weight Models 
   - Best Agentic Use-Case
-- **Demo video:** https://www.youtube.com/watch?v=uiouI_9ESK0 · **Live demo (optional):** https://huggingface.co/spaces/HP0077/mixshield
+- **Demo video:** https://www.youtube.com/watch?v=uiouI_9ESK0 
+- **Live demo (optional):** https://huggingface.co/spaces/HP0077/mixshield
 - **Quickstart & keyless replay:** `cp .env.example .env`, then `python -X utf8 -m demo.playground`. Run 1 and "Replay a recorded run" work without any keys.
 
 **Hidden instructions written in Hinglish or Hindi slip past today's guards. MixShield catches them before a tool-using AI agent acts on them.**
