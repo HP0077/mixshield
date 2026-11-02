@@ -7,7 +7,9 @@
   - `Muse Spark Open` (`meta-models/muse-spark-open-1026`, via Baseten): load-bearing open-weight stage, the code-mixing-aware classifier inside the MixShield screen on every tool output, and the tool-calling agent in run 3
   - `Muse Spark` (`muse-spark-1.3`, Meta Model API): agent in the AgentDojo experiments, and Hindi translation for the benchmark
   - `Llama Prompt Guard 2 86M`: local first check inside the screen, and a baseline; `Llama Guard 3 1B`: baseline
-- **Bonus categories targeted:** Best Build on Meta Open Weight Models · Best Agentic Use-Case
+- **Bonus categories targeted:**
+  - Best Build on Meta Open Weight Models 
+  - Best Agentic Use-Case
 - **Demo video:** https://www.youtube.com/watch?v=uiouI_9ESK0 · **Live demo (optional):** https://huggingface.co/spaces/HP0077/mixshield
 - **Quickstart & keyless replay:** `cp .env.example .env`, then `python -X utf8 -m demo.playground`. Run 1 and "Replay a recorded run" work without any keys.
 
