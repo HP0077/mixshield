@@ -119,7 +119,7 @@ Run it: `pip install -e ".[all]"`, then `python -X utf8 -m demo.playground`. The
    - If the screen misses it, the gate still holds the payment: **NEEDS YOUR OK** (amber), nothing is sent.
 3. **Muse Spark Open (real model), with MixShield:** "Pay INV-101". The trusted payee goes through (green).
 
-The real screen checked the unedited demo email in 20 runs. It flagged it 17 times. Three times it did not, and each time the gate answered "ask" ([docs/demo_log.md](docs/demo_log.md)). Prompt Guard 2 scored it 0.00089 in every run where its score was recorded (not flagged).
+The real screen checked the unedited demo email in 21 runs. It flagged it 17 times. Four times it did not, and each time the gate answered "ask" ([docs/demo_log.md](docs/demo_log.md)). Prompt Guard 2 scored it 0.00089 in every run where its score was recorded (not flagged).
 
 A second client, MCP Inspector, gets the same protection with one config change ([docs/demo_inspector.md](docs/demo_inspector.md)).
 
@@ -259,7 +259,7 @@ The screen's time is almost all the Muse Spark Open API call. A task with 4 to 5
 - **False alarms on delegated instructions.** On clean real tasks, 10 of 77 runs had a tool output the screen flagged. These were real instructions the user wanted carried out, for example "invite Dora" in a Slack message. The screen does not see the user's request, so it cannot tell delegated instructions from injected ones.
 - **Latency.** About 3.5 s per tool output (median), because of the classifier API call. The proxy also needs 15 to 39 s to start.
 - **Prompt Guard 2 adds little on our own attacks.** The screen uses Prompt Guard 2 at its default 0.5, and at 0.5 it flagged none of the 300 E2 attacks. So in E2 every catch came from the Muse Spark Open classifier. We keep it in the screen on purpose. In E5 it stopped about half of AgentDojo's built-in English attacks at 0.5 (attack success 47 of 99, so 52 stopped), so it is a fast, local first check for classic jailbreak wording (median 0.17 s per text on CPU). It does not help on natural or Hinglish attacks (E2: 0 of 300 flagged; E5 adaptive Hinglish: 0 of 30), which is the gap MixShield fills.
-- **One run is noisy.** The classifier runs at temperature 0 but does not always give the same answer. Example: the demo email was flagged in 17 of 20 runs. E2 uses 3 runs. E3 to E5 use 1 run.
+- **One run is noisy.** The classifier runs at temperature 0 but does not always give the same answer. Example: the demo email was flagged in 17 of 21 runs. E2 uses 3 runs. E3 to E5 use 1 run.
 - **Gate gaps.** Amounts, dates and the IDs of the user's own records are not checked, so a wrong-record delete passes. A value glued to a letter or digit is not tested.
 - **Texts.**
   - The Hindi texts are machine translations. 50 of 250 (20%) were checked by hand against their back-translations. Meaning was kept in all 50. A few had small changes in tone or names, and one (benign_116) turned a note into an instruction.
